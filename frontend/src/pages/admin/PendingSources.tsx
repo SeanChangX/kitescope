@@ -83,29 +83,31 @@ export default function PendingSources() {
       {list.length === 0 ? (
         <p className="text-text-muted">{t("admin.noPending")}</p>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {list.map((p) => (
             <div
               key={p.id}
-              className="flex flex-wrap items-center gap-4 rounded border border-border p-2 text-sm"
+              className="flex flex-col gap-3 rounded border border-border p-3"
             >
-              <PreviewImage id={p.id} />
-              <div className="min-w-0 flex-1">
-                <span className="font-medium text-text-primary">{p.name || `#${p.id}`}</span>
-                <span className="ml-2 text-text-muted">{p.type}</span>
-                <div className="truncate text-text-muted">{p.url}</div>
-                {p.location && <div className="text-text-muted">Location: {p.location}</div>}
+              <div className="flex flex-wrap items-start gap-3 text-sm">
+                <PreviewImage id={p.id} />
+                <div className="min-w-0 flex-1">
+                  <span className="font-medium text-text-primary">{p.name || `#${p.id}`}</span>
+                  <span className="ml-2 text-text-muted">{p.type}</span>
+                  <div className="truncate text-text-muted">{p.url}</div>
+                  {p.location && <div className="text-text-muted">Location: {p.location}</div>}
+                </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex w-full gap-2">
                 <button
                   onClick={() => approve(p.id)}
-                  className="ks-btn rounded bg-ks-success/20 px-3 py-1 text-ks-success hover:bg-ks-success hover:text-bg-primary"
+                  className="ks-btn flex-1 min-w-0 py-1.5 rounded bg-ks-success/20 text-ks-success hover:bg-ks-success hover:text-bg-primary"
                 >
                   {t("admin.approve")}
                 </button>
                 <button
                   onClick={() => remove(p.id)}
-                  className="ks-btn rounded bg-ks-danger/20 px-3 py-1 text-ks-danger hover:bg-ks-danger hover:text-white"
+                  className="ks-btn flex-1 min-w-0 py-1.5 rounded bg-ks-danger/20 text-ks-danger hover:bg-ks-danger hover:text-white"
                 >
                   {t("admin.delete")}
                 </button>

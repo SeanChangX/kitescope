@@ -2,6 +2,7 @@
 from contextlib import asynccontextmanager
 import asyncio
 import logging
+import time
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import os
@@ -10,6 +11,9 @@ from vision.ingestion_loop import loop as ingestion_loop
 
 # Allow a few concurrent snapshots so YouTube (slow) and NVR (fast) can run in parallel; cap to avoid overload
 _snapshot_semaphore = asyncio.Semaphore(4)
+# Throttle "snapshot failed" log per URL to avoid flooding when YouTube/server blocks same URL repeatedly
+_fail_log_throttle: dict[str, float] = {}
+_fail_log_interval_sec = 300
 log = logging.getLogger("vision.app")
 
 
@@ -79,7 +83,10 @@ async def snapshot(url: str = "", overlay: bool = False, t: str = ""):
                 data = await fetch_snapshot_jpeg(url, 0)
                 det_count = 0
     if data is None:
-        log.warning("snapshot failed to fetch frame url=%s", url_safe)
+        now = time.monotonic()
+        if now - _fail_log_throttle.get(url_safe, 0) >= _fail_log_interval_sec:
+            _fail_log_throttle[url_safe] = now
+            log.warning("snapshot failed to fetch frame url=%s (throttled: same URL logged at most once per %ss)", url_safe, _fail_log_interval_sec)
         raise HTTPException(status_code=502, detail="Failed to fetch frame")
     return Response(
         content=data,

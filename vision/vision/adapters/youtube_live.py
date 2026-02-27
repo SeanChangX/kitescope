@@ -7,10 +7,31 @@ import numpy as np
 from .base import BaseAdapter, FrameResult
 
 
+class _YtdlpSilentLogger:
+    """Suppress yt-dlp stderr/log (e.g. 'Sign in to confirm you're not a bot') when server has no cookies."""
+
+    def debug(self, msg):
+        pass
+
+    def info(self, msg):
+        pass
+
+    def warning(self, msg):
+        pass
+
+    def error(self, msg):
+        pass
+
+
 def _get_stream_url(url: str) -> str | None:
     try:
         import yt_dlp
-        opts = {"quiet": True, "no_warnings": True, "extract_flat": False}
+        opts = {
+            "quiet": True,
+            "no_warnings": True,
+            "extract_flat": False,
+            "logger": _YtdlpSilentLogger(),
+        }
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
             if not info:

@@ -89,7 +89,7 @@ export default function SuggestForm({ onSuccess, hasUser: _hasUser }: Props) {
             maxLength={513}
           />
           <p className="mt-1 text-xs text-text-muted">
-            Place name (e.g. Baishawan, New Taipei) or GPS coordinates as lat,lon (e.g. 24.8,120.96) for accurate local weather (max 512 characters).
+            {t("suggest.locationHint")}
           </p>
           {locationError && <p className="mt-1 text-xs text-ks-danger">{locationError}</p>}
         </div>
@@ -106,7 +106,7 @@ export default function SuggestForm({ onSuccess, hasUser: _hasUser }: Props) {
             maxLength={257}
           />
           <p className="mt-1 text-xs text-text-muted">
-            Example: Beach cam 1. Display name for the stream (max 256 characters).
+            {t("suggest.nameHint")}
           </p>
           {nameError && <p className="mt-1 text-xs text-ks-danger">{nameError}</p>}
         </div>

@@ -67,7 +67,7 @@ services:
       - VISION_LOOP_INTERVAL_SEC=5
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/health')"]
-      interval: 3s
+      interval: 15s
       timeout: 2s
       retries: 5
       start_period: 10s
