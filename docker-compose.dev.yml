@@ -6,7 +6,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
-    image: kitescope-frontend:dev
+    image: seanchangx/kitescope-frontend:dev
     container_name: kitescope-frontend
     ports:
       - "5173:5173"
@@ -26,7 +26,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    image: kitescope-backend:latest
+    image: seanchangx/kitescope-backend:latest
     container_name: kitescope-backend
     ports:
       - "8000:8000"
@@ -49,7 +49,7 @@ services:
     build:
       context: ./vision
       dockerfile: Dockerfile
-    image: kitescope-vision:latest
+    image: seanchangx/kitescope-vision:latest
     container_name: kitescope-vision
     ports:
       - "9000:9000"
