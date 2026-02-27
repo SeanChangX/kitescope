@@ -1,0 +1,52 @@
+# Environment
+.env
+.env.local
+*.local
+
+# Data (SQLite, uploads)
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+*.egg-info/
+.eggs/
+
+# Node
+node_modules/
+npm-debug.log*
+.pnpm-debug.log*
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Model files (large)
+*.onnx
+*.pt
+*.pth
+*.keras
+
+# Keys / secrets (do not commit)
+*.pem
+secrets/

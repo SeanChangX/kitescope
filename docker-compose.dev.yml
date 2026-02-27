@@ -1,0 +1,87 @@
+# KiteScope - Development (hot reload)
+# Frontend: Vite dev server :5173 | Backend: :8000 | Vision: :9000 | go2rtc: :1984
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    image: kitescope-frontend:dev
+    container_name: kitescope-frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8000
+      - VITE_PROXY_TARGET=http://backend:8000
+      # Dashboard refresh (ms). Same role as VISION_LOOP_INTERVAL_SEC for vision.
+      - VITE_PREVIEW_INTERVAL_MS=${VITE_PREVIEW_INTERVAL_MS:-3000}
+      - VITE_COUNTS_INTERVAL_MS=${VITE_COUNTS_INTERVAL_MS:-3000}
+      - VITE_PREVIEW_STAGGER_MS=${VITE_PREVIEW_STAGGER_MS:-500}
+    command: npm run dev -- --host
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: kitescope-backend:latest
+    container_name: kitescope-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - kitescope_data:/app/data
+    environment:
+      - DATABASE_URL=sqlite:////app/data/kitescope.db
+      - SECRET_KEY=dev-secret-key
+      - INTERNAL_SECRET=${INTERNAL_SECRET:-}
+      - GO2RTC_BASE_URL=http://go2rtc:1984
+      - VISION_URL=http://vision:9000
+    env_file:
+      - .env
+    depends_on:
+      vision:
+        condition: service_healthy
+
+  vision:
+    build:
+      context: ./vision
+      dockerfile: Dockerfile
+    image: kitescope-vision:latest
+    container_name: kitescope-vision
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./vision:/app
+      - kitescope_data:/app/data
+      - vision_models:/app/models
+    environment:
+      - GO2RTC_BASE_URL=http://go2rtc:1984
+      - BACKEND_URL=http://backend:8000
+      - INTERNAL_SECRET=${INTERNAL_SECRET:-}
+      - MODEL_PATH=/app/models/kite_nano.onnx
+      - CONFIDENCE_THRESHOLD=0.5
+      - SKIP_FRAMES=3
+      - VISION_LOOP_INTERVAL_SEC=5
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/health')"]
+      interval: 3s
+      timeout: 2s
+      retries: 5
+      start_period: 10s
+
+  go2rtc:
+    image: alexxit/go2rtc:latest
+    restart: unless-stopped
+    container_name: kitescope-go2rtc
+    ports:
+      - "1984:1984"
+    volumes:
+      - go2rtc_config:/config
+
+volumes:
+  kitescope_data:
+  vision_models:
+  go2rtc_config:

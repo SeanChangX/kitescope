@@ -1,0 +1,87 @@
+# KiteScope - Production
+# Frontend (Nginx), Backend (FastAPI), Vision, go2rtc; SQLite volume
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_PREVIEW_INTERVAL_MS=${VITE_PREVIEW_INTERVAL_MS:-}
+        - VITE_COUNTS_INTERVAL_MS=${VITE_COUNTS_INTERVAL_MS:-}
+        - VITE_PREVIEW_STAGGER_MS=${VITE_PREVIEW_STAGGER_MS:-}
+    image: kitescope-frontend:latest
+    container_name: kitescope-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    environment:
+      - NODE_ENV=production
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: kitescope-backend:latest
+    container_name: kitescope-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - kitescope_data:/app/data
+    environment:
+      - DATABASE_URL=sqlite:////app/data/kitescope.db
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - INTERNAL_SECRET=${INTERNAL_SECRET:-}
+      - GO2RTC_BASE_URL=http://go2rtc:1984
+      - VISION_URL=http://vision:9000
+    env_file:
+      - .env
+    depends_on:
+      vision:
+        condition: service_healthy
+
+  vision:
+    build:
+      context: ./vision
+      dockerfile: Dockerfile
+    image: kitescope-vision:latest
+    container_name: kitescope-vision
+    restart: unless-stopped
+    volumes:
+      - kitescope_data:/app/data
+      - vision_models:/app/models
+    environment:
+      - GO2RTC_BASE_URL=http://go2rtc:1984
+      - BACKEND_URL=http://backend:8000
+      - INTERNAL_SECRET=${INTERNAL_SECRET:-}
+      - MODEL_PATH=/app/models/kite_nano.onnx
+      - CONFIDENCE_THRESHOLD=0.5
+      - SKIP_FRAMES=3
+      - VISION_LOOP_INTERVAL_SEC=30
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/health')"]
+      interval: 3s
+      timeout: 2s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      - go2rtc
+
+  go2rtc:
+    image: alexxit/go2rtc:latest
+    restart: unless-stopped
+    container_name: kitescope-go2rtc
+    ports:
+      - "1984:1984"
+    volumes:
+      - go2rtc_config:/config
+
+volumes:
+  kitescope_data:
+  vision_models:
+  go2rtc_config:

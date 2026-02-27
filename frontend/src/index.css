@@ -1,0 +1,79 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Orbitron:wght@400;600;700&family=Rajdhani:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  *:focus,
+  *:focus-visible {
+    outline: none !important;
+  }
+  button:focus,
+  input:focus,
+  select:focus,
+  textarea:focus,
+  a:focus {
+    outline: none !important;
+  }
+  body {
+    @apply bg-bg-primary text-text-primary font-body antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer components {
+  .ks-btn {
+    @apply inline-flex items-center justify-center px-5 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-bg-primary;
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 600;
+  }
+  .ks-btn-primary {
+    @apply bg-primary text-white hover:bg-primary-dark focus:ring-primary;
+  }
+  .ks-btn-secondary {
+    @apply bg-bg-tertiary text-text-primary border border-border hover:bg-bg-input focus:ring-primary;
+  }
+  .ks-card {
+    @apply bg-bg-card border border-border-dark rounded-xl p-5 shadow-xl;
+  }
+  .ks-input {
+    @apply w-full px-4 py-2.5 bg-bg-input border border-border rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all focus-visible:outline-none;
+    font-family: 'Rajdhani', sans-serif;
+  }
+  .ks-checkbox {
+    @apply w-5 h-5 rounded border-2 border-border bg-bg-input text-primary accent-primary cursor-pointer transition-colors focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg-card;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+  .ks-checkbox:checked {
+    @apply bg-primary border-primary;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3E%3C/svg%3E");
+  }
+  .nav-tab {
+    @apply px-4 py-2 text-sm font-medium rounded-lg transition-all flex items-center gap-2 font-body font-semibold;
+  }
+  .nav-tab.active {
+    @apply bg-primary text-white;
+  }
+  .nav-tab:not(.active) {
+    @apply bg-bg-tertiary text-text-secondary hover:bg-bg-input hover:text-text-primary;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #1f1f1f;
+}
+::-webkit-scrollbar-thumb {
+  background: #ff0050;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #e60045;
+}
