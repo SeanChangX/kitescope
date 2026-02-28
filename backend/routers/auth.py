@@ -27,6 +27,15 @@ LINE_TOKEN_URL = "https://api.line.me/oauth2/v2.1/token"
 LINE_PROFILE_URL = "https://api.line.me/v2/profile"
 
 
+def _line_login_credentials(by_key: dict) -> tuple[str, str]:
+    """Return (channel_id, channel_secret) for LINE Login. Prefer line_login_* when set (separate LINE Login channel)."""
+    login_id = (by_key.get("line_login_channel_id") or "").strip()
+    login_secret = (by_key.get("line_login_channel_secret") or "").strip()
+    if login_id and login_secret:
+        return login_id, login_secret
+    return (by_key.get("line_channel_id") or "").strip(), (by_key.get("line_channel_secret") or "").strip()
+
+
 @router.get("/line/login-url")
 async def line_login_url(
     redirect_uri: str = "",
@@ -34,10 +43,12 @@ async def line_login_url(
     db: AsyncSession = Depends(get_db),
 ):
     """Return LINE authorization URL. redirect_uri must be the frontend callback (e.g. /auth/callback)."""
-    result = await db.execute(select(BotConfig).where(BotConfig.key.in_(["line_channel_id", "line_channel_secret"])))
+    result = await db.execute(select(BotConfig).where(BotConfig.key.in_([
+        "line_channel_id", "line_channel_secret", "line_login_channel_id", "line_login_channel_secret",
+    ])))
     rows = result.scalars().all()
     by_key = {r.key: r.value for r in rows}
-    channel_id = (by_key.get("line_channel_id") or "").strip()
+    channel_id, _ = _line_login_credentials(by_key)
     if not channel_id or not redirect_uri:
         raise HTTPException(status_code=400, detail="LINE not configured or redirect_uri required")
     import urllib.parse
@@ -64,11 +75,12 @@ async def line_callback(
     db: AsyncSession = Depends(get_db),
 ):
     """Exchange code for token, get profile, create/update User, return user JWT."""
-    result = await db.execute(select(BotConfig).where(BotConfig.key.in_(["line_channel_id", "line_channel_secret"])))
+    result = await db.execute(select(BotConfig).where(BotConfig.key.in_([
+        "line_channel_id", "line_channel_secret", "line_login_channel_id", "line_login_channel_secret",
+    ])))
     rows = result.scalars().all()
     by_key = {r.key: r.value for r in rows}
-    channel_id = (by_key.get("line_channel_id") or "").strip()
-    channel_secret = (by_key.get("line_channel_secret") or "").strip()
+    channel_id, channel_secret = _line_login_credentials(by_key)
     if not channel_id or not channel_secret or not body.code or not body.redirect_uri:
         raise HTTPException(status_code=400, detail="Invalid request or LINE not configured")
     async with httpx.AsyncClient(timeout=10.0) as client:

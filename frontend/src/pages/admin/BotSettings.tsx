@@ -1,12 +1,21 @@
 import { useEffect, useState } from "react";
 import { authFetch } from "../../lib/auth";
+import { useI18n } from "../../lib/i18n";
 
 type BotState = {
-  line: { channel_id: string; channel_secret: string; channel_access_token: string; configured: boolean };
+  line: {
+    channel_id: string;
+    channel_secret: string;
+    channel_access_token: string;
+    login_channel_id?: string;
+    login_channel_secret?: string;
+    configured: boolean;
+  };
   telegram: { bot_token: string; configured: boolean };
 };
 
 export default function BotSettings() {
+  const { t } = useI18n();
   const [data, setData] = useState<BotState | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -15,6 +24,8 @@ export default function BotSettings() {
     line_channel_id: "",
     line_channel_secret: "",
     line_channel_access_token: "",
+    line_login_channel_id: "",
+    line_login_channel_secret: "",
     telegram_bot_token: "",
   });
 
@@ -29,6 +40,8 @@ export default function BotSettings() {
             line_channel_id: d.line?.channel_id ?? "",
             line_channel_secret: "",
             line_channel_access_token: "",
+            line_login_channel_id: d.line?.login_channel_id ?? "",
+            line_login_channel_secret: "",
             telegram_bot_token: "",
           }));
         }
@@ -38,7 +51,11 @@ export default function BotSettings() {
 
   useEffect(() => {
     if (data) {
-      setForm((f) => ({ ...f, line_channel_id: data.line?.channel_id ?? "" }));
+      setForm((f) => ({
+        ...f,
+        line_channel_id: data.line?.channel_id ?? "",
+        line_login_channel_id: data.line?.login_channel_id ?? "",
+      }));
     }
   }, [data]);
 
@@ -49,6 +66,8 @@ export default function BotSettings() {
     const body: Record<string, string> = { line_channel_id: form.line_channel_id };
     if (form.line_channel_secret) body.line_channel_secret = form.line_channel_secret;
     if (form.line_channel_access_token) body.line_channel_access_token = form.line_channel_access_token;
+    if (form.line_login_channel_id !== undefined) body.line_login_channel_id = form.line_login_channel_id;
+    if (form.line_login_channel_secret) body.line_login_channel_secret = form.line_login_channel_secret;
     if (form.telegram_bot_token) body.telegram_bot_token = form.telegram_bot_token;
     const r = await authFetch("/api/admin/settings/bots", {
       method: "PUT",
@@ -57,61 +76,76 @@ export default function BotSettings() {
     });
     setSaving(false);
     if (r.ok) {
-      setMessage("Saved.");
+      setMessage(t("admin.saved"));
       authFetch("/api/admin/settings/bots")
         .then((res) => (res.ok ? res.json() : null))
         .then(setData);
     } else {
-      setMessage("Failed to save.");
+      setMessage(t("admin.saveFailed"));
     }
   }
 
-  if (loading) return <p className="text-text-muted">Loading...</p>;
+  if (loading) return <p className="text-text-muted">{t("common.loading")}</p>;
 
   return (
     <div className="ks-card">
-      <h3 className="font-gaming mb-3 font-medium text-text-primary">Bot settings (LINE / Telegram)</h3>
+      <h3 className="font-gaming mb-3 font-medium text-text-primary">{t("admin.botSettings")}</h3>
       <form onSubmit={submit} className="space-y-4 max-w-lg">
         <div>
-          <h4 className="text-sm font-medium text-text-secondary mb-2">LINE</h4>
+          <h4 className="text-sm font-medium text-text-secondary mb-2">{t("admin.line")}</h4>
           <div className="space-y-2">
             <input
               type="text"
-              placeholder="Channel ID"
+              placeholder={t("admin.channelId")}
               value={form.line_channel_id}
               onChange={(e) => setForm((f) => ({ ...f, line_channel_id: e.target.value }))}
               className="ks-input"
             />
             <input
               type="password"
-              placeholder="Channel secret (leave blank to keep existing)"
+              placeholder={t("admin.channelSecretPlaceholder")}
               value={form.line_channel_secret}
               onChange={(e) => setForm((f) => ({ ...f, line_channel_secret: e.target.value }))}
               className="ks-input"
             />
             <input
               type="password"
-              placeholder="Channel access token (leave blank to keep existing)"
+              placeholder={t("admin.channelAccessTokenPlaceholder")}
               value={form.line_channel_access_token}
               onChange={(e) => setForm((f) => ({ ...f, line_channel_access_token: e.target.value }))}
               className="ks-input"
             />
+            <p className="text-xs text-text-muted mt-1">{t("admin.lineLoginChannelHint")}</p>
+            <input
+              type="text"
+              placeholder={t("admin.lineLoginChannelIdPlaceholder")}
+              value={form.line_login_channel_id}
+              onChange={(e) => setForm((f) => ({ ...f, line_login_channel_id: e.target.value }))}
+              className="ks-input"
+            />
+            <input
+              type="password"
+              placeholder={t("admin.lineLoginChannelSecretPlaceholder")}
+              value={form.line_login_channel_secret}
+              onChange={(e) => setForm((f) => ({ ...f, line_login_channel_secret: e.target.value }))}
+              className="ks-input"
+            />
             {data?.line?.configured && (
-              <p className="text-xs text-text-muted">LINE is configured. Enter new values only to overwrite.</p>
+              <p className="text-xs text-text-muted">{t("admin.lineConfiguredHint")}</p>
             )}
           </div>
         </div>
         <div>
-          <h4 className="text-sm font-medium text-text-secondary mb-2">Telegram</h4>
+          <h4 className="text-sm font-medium text-text-secondary mb-2">{t("admin.telegram")}</h4>
           <input
             type="password"
-            placeholder="Bot token (leave blank to keep existing)"
+            placeholder={t("admin.telegramBotTokenPlaceholder")}
             value={form.telegram_bot_token}
             onChange={(e) => setForm((f) => ({ ...f, telegram_bot_token: e.target.value }))}
             className="ks-input"
           />
           {data?.telegram?.configured && (
-            <p className="text-xs text-text-muted">Telegram is configured. Enter new token only to overwrite.</p>
+            <p className="text-xs text-text-muted">{t("admin.telegramConfiguredHint")}</p>
           )}
         </div>
         {message && <p className="text-sm text-text-secondary">{message}</p>}
@@ -120,7 +154,7 @@ export default function BotSettings() {
           disabled={saving}
           className="ks-btn ks-btn-primary disabled:opacity-50"
         >
-          {saving ? "Saving..." : "Save"}
+          {saving ? t("admin.saving") : t("admin.save")}
         </button>
       </form>
     </div>

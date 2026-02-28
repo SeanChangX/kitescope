@@ -312,6 +312,8 @@ async def get_bot_settings(
             "channel_id": by_key.get("line_channel_id") or "",
             "channel_secret": _mask(by_key.get("line_channel_secret")),
             "channel_access_token": _mask(by_key.get("line_channel_access_token")),
+            "login_channel_id": by_key.get("line_login_channel_id") or "",
+            "login_channel_secret": _mask(by_key.get("line_login_channel_secret")),
             "configured": bool(by_key.get("line_channel_secret") and by_key.get("line_channel_access_token")),
         },
         "telegram": {
@@ -325,6 +327,8 @@ class BotSettingsBody(BaseModel):
     line_channel_id: str | None = None
     line_channel_secret: str | None = None
     line_channel_access_token: str | None = None
+    line_login_channel_id: str | None = None
+    line_login_channel_secret: str | None = None
     telegram_bot_token: str | None = None
 
 
@@ -341,6 +345,10 @@ async def put_bot_settings(
         keys_update.append(("line_channel_secret", body.line_channel_secret.strip()))
     if body.line_channel_access_token is not None and body.line_channel_access_token.strip():
         keys_update.append(("line_channel_access_token", body.line_channel_access_token.strip()))
+    if body.line_login_channel_id is not None:
+        keys_update.append(("line_login_channel_id", body.line_login_channel_id.strip()))
+    if body.line_login_channel_secret is not None and body.line_login_channel_secret.strip():
+        keys_update.append(("line_login_channel_secret", body.line_login_channel_secret.strip()))
     if body.telegram_bot_token is not None and body.telegram_bot_token.strip():
         keys_update.append(("telegram_bot_token", body.telegram_bot_token.strip()))
     from datetime import datetime

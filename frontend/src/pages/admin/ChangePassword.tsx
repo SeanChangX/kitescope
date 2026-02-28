@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { authFetch } from "../../lib/auth";
+import { useI18n } from "../../lib/i18n";
 
 export default function ChangePassword() {
+  const { t } = useI18n();
   const [current, setCurrent] = useState("");
   const [newPass, setNewPass] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -11,11 +13,11 @@ export default function ChangePassword() {
     e.preventDefault();
     setMessage(null);
     if (newPass !== confirm) {
-      setMessage({ type: "err", text: "New password and confirmation do not match." });
+      setMessage({ type: "err", text: t("admin.passwordMismatch") });
       return;
     }
     if (newPass.length < 8) {
-      setMessage({ type: "err", text: "New password must be at least 8 characters." });
+      setMessage({ type: "err", text: t("admin.passwordMinLength") });
       return;
     }
     const r = await authFetch("/api/auth/admin/change-password", {
@@ -25,21 +27,21 @@ export default function ChangePassword() {
     });
     const data = await r.json().catch(() => ({}));
     if (r.ok) {
-      setMessage({ type: "ok", text: "Password updated." });
+      setMessage({ type: "ok", text: t("admin.passwordUpdated") });
       setCurrent("");
       setNewPass("");
       setConfirm("");
     } else {
-      setMessage({ type: "err", text: (data.detail as string) || "Failed to change password." });
+      setMessage({ type: "err", text: (data.detail as string) || t("admin.passwordChangeFailed") });
     }
   }
 
   return (
     <div className="ks-card">
-      <h3 className="font-gaming mb-3 font-medium text-text-primary">Change password</h3>
+      <h3 className="font-gaming mb-3 font-medium text-text-primary">{t("admin.changePassword")}</h3>
       <form onSubmit={submit} className="space-y-3 max-w-sm">
         <div>
-          <label className="block text-sm text-text-muted mb-1">Current password</label>
+          <label className="block text-sm text-text-muted mb-1">{t("admin.currentPassword")}</label>
           <input
             type="password"
             value={current}
@@ -49,7 +51,7 @@ export default function ChangePassword() {
           />
         </div>
         <div>
-          <label className="block text-sm text-text-muted mb-1">New password</label>
+          <label className="block text-sm text-text-muted mb-1">{t("admin.newPassword")}</label>
           <input
             type="password"
             value={newPass}
@@ -60,7 +62,7 @@ export default function ChangePassword() {
           />
         </div>
         <div>
-          <label className="block text-sm text-text-muted mb-1">Confirm new password</label>
+          <label className="block text-sm text-text-muted mb-1">{t("admin.confirmNewPassword")}</label>
           <input
             type="password"
             value={confirm}
@@ -76,7 +78,7 @@ export default function ChangePassword() {
           </p>
         )}
         <button type="submit" className="ks-btn ks-btn-primary">
-          Change password
+          {t("admin.changePassword")}
         </button>
       </form>
     </div>
