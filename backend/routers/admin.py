@@ -1,7 +1,7 @@
 import re
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func, or_
 from pydantic import BaseModel
 
 from datetime import datetime
@@ -212,12 +212,60 @@ async def delete_source(
     return {"message": "Deleted"}
 
 
+_USER_SORT_COLUMNS = {
+    "id": User.id,
+    "display_name": User.display_name,
+    "email": User.email,
+    "last_seen": User.last_seen,
+    "banned": User.banned,
+    "created_at": User.created_at,
+}
+
+
+def _user_search_filter(q: str):
+    """Build filter for user search: display_name, email, or id (if q is numeric). Escapes LIKE wildcards."""
+    q = (q or "").strip()
+    if not q:
+        return None
+    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    pattern = f"%{escaped}%"
+    conditions = [
+        User.display_name.like(pattern),
+        User.email.like(pattern),
+    ]
+    if q.isdigit():
+        conditions.append(User.id == int(q))
+    return or_(*conditions)
+
+
 @router.get("/users")
 async def list_users(
     db: AsyncSession = Depends(get_db),
     _: None = Depends(_admin_only),
+    limit: int = 20,
+    offset: int = 0,
+    sort_by: str = "created_at",
+    order: str = "desc",
+    q: str | None = None,
 ):
-    result = await db.execute(select(User).order_by(User.created_at.desc()))
+    """List users with pagination, sort, and optional search (q: name, email, or id)."""
+    limit = max(1, min(100, limit))
+    offset = max(0, offset)
+    order_asc = order.lower() == "asc"
+    col = _USER_SORT_COLUMNS.get(sort_by) or User.created_at
+    order_col = col.asc() if order_asc else col.desc()
+    where = _user_search_filter(q or "")
+    base = select(User)
+    if where is not None:
+        base = base.where(where)
+    count_q = select(func.count()).select_from(User)
+    if where is not None:
+        count_q = count_q.where(where)
+    count_result = await db.execute(count_q)
+    total = count_result.scalar() or 0
+    result = await db.execute(
+        base.order_by(order_col).limit(limit).offset(offset)
+    )
     rows = result.scalars().all()
     out = []
     for r in rows:
@@ -238,7 +286,7 @@ async def list_users(
             "created_at": r.created_at.isoformat(),
             "channel": channel,
         })
-    return out
+    return {"items": out, "total": total}
 
 
 @router.post("/users/{user_id}/ban")

@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { authFetch } from "../../lib/auth";
 import { useI18n } from "../../lib/i18n";
+
+const PAGE_SIZE = 20;
 
 type User = {
   id: number;
@@ -14,50 +16,140 @@ type User = {
   channel: string;
 };
 
+type SortBy = "id" | "display_name" | "email" | "last_seen" | "banned" | "created_at";
+type Order = "asc" | "desc";
+
 export default function UserList() {
   const { t } = useI18n();
   const [list, setList] = useState<User[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-
-  function load() {
-    authFetch("/api/admin/users")
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setList)
-      .catch(() => setList([]))
-      .finally(() => setLoading(false));
-  }
+  const [loadMoreLoading, setLoadMoreLoading] = useState(false);
+  const [sortBy, setSortBy] = useState<SortBy>("created_at");
+  const [order, setOrder] = useState<Order>("desc");
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    load();
-  }, []);
+    const t = setTimeout(() => setSearchQuery(searchInput.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  const load = useCallback(
+    (reset: boolean) => {
+      const offset = reset ? 0 : list.length;
+      if (reset) {
+        setLoading(true);
+        setList([]);
+      } else {
+        setLoadMoreLoading(true);
+      }
+      const params = new URLSearchParams({
+        limit: String(PAGE_SIZE),
+        offset: String(offset),
+        sort_by: sortBy,
+        order,
+      });
+      if (searchQuery) params.set("q", searchQuery);
+      authFetch(`/api/admin/users?${params}`)
+        .then((r) => (r.ok ? r.json() : { items: [], total: 0 }))
+        .then((data: { items: User[]; total: number }) => {
+          if (reset) {
+            setList(data.items || []);
+          } else {
+            setList((prev: User[]) => [...prev, ...(data.items || [])]);
+          }
+          setTotal(data.total ?? 0);
+        })
+        .catch(() => {
+          if (reset) setList([]);
+          setTotal(0);
+        })
+        .finally(() => {
+          setLoading(false);
+          setLoadMoreLoading(false);
+        });
+    },
+    [list.length, sortBy, order, searchQuery]
+  );
+
+  const loadFirst = useCallback(() => load(true), [load]);
+
+  useEffect(() => {
+    load(true);
+  }, [sortBy, order, searchQuery]);
 
   async function ban(id: number) {
     if (!confirm(t("admin.banUserConfirm"))) return;
     const r = await authFetch(`/api/admin/users/${id}/ban`, { method: "POST" });
-    if (r.ok) load();
+    if (r.ok) loadFirst();
   }
 
   async function unban(id: number) {
     if (!confirm(t("admin.unbanUserConfirm"))) return;
     const r = await authFetch(`/api/admin/users/${id}/unban`, { method: "POST" });
-    if (r.ok) load();
+    if (r.ok) loadFirst();
   }
 
   async function remove(id: number) {
     if (!confirm(t("admin.deleteUserConfirm"))) return;
     const r = await authFetch(`/api/admin/users/${id}`, { method: "DELETE" });
-    if (r.ok) load();
+    if (r.ok) loadFirst();
   }
 
-  if (loading) return <p className="text-text-muted">{t("common.loading")}</p>;
+  const sortOptions: { value: SortBy; labelKey: string }[] = [
+    { value: "id", labelKey: "admin.sortId" },
+    { value: "display_name", labelKey: "admin.sortName" },
+    { value: "email", labelKey: "admin.sortEmail" },
+    { value: "last_seen", labelKey: "admin.sortLastSeen" },
+    { value: "banned", labelKey: "admin.sortBanned" },
+    { value: "created_at", labelKey: "admin.sortCreatedAt" },
+  ];
 
   return (
     <div className="ks-card">
-      <h3 className="font-gaming mb-3 font-medium text-text-primary">{t("admin.users")}</h3>
-      {list.length === 0 ? (
-        <p className="text-text-muted">{t("admin.noUsers")}</p>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <h3 className="font-gaming font-medium text-text-primary">{t("admin.users")}</h3>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <input
+            type="text"
+            placeholder={t("admin.searchUsers")}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className="ks-input w-40 py-1 text-sm sm:w-52"
+            aria-label={t("admin.searchUsers")}
+          />
+          <label className="text-text-muted">{t("admin.sortBy")}</label>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SortBy)}
+            className="ks-input py-1 pr-6 text-sm"
+          >
+            {sortOptions.map((o) => (
+              <option key={o.value} value={o.value}>
+                {t(o.labelKey)}
+              </option>
+            ))}
+          </select>
+          <select
+            value={order}
+            onChange={(e) => setOrder(e.target.value as Order)}
+            className="ks-input py-1 pr-6 text-sm"
+          >
+            <option value="asc">{t("admin.orderAsc")}</option>
+            <option value="desc">{t("admin.orderDesc")}</option>
+          </select>
+        </div>
+      </div>
+      {loading && list.length === 0 ? (
+        <p className="text-text-muted py-4">{t("common.loading")}</p>
+      ) : list.length === 0 ? (
+        <p className="text-text-muted py-4">{t("admin.noUsers")}</p>
       ) : (
         <>
+          <p className="mb-2 text-xs text-text-muted">
+            {list.length} / {total}
+          </p>
           <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead>
@@ -156,6 +248,18 @@ export default function UserList() {
               </div>
             ))}
           </div>
+          {list.length < total && (
+            <div className="mt-3 flex justify-center">
+              <button
+                type="button"
+                onClick={() => load(false)}
+                disabled={loadMoreLoading}
+                className="ks-btn ks-btn-secondary disabled:opacity-50"
+              >
+                {loadMoreLoading ? t("common.loading") : t("admin.loadMore")}
+              </button>
+            </div>
+          )}
         </>
       )}
     </div>
