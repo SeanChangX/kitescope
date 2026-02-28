@@ -19,9 +19,9 @@ function AdminDashboard() {
   return (
     <div className="space-y-6">
       <h2 className="font-gaming text-xl font-semibold text-text-primary">{t("admin.dashboard")}</h2>
-      <NotifyFormatSettings />
       <PendingSources />
       <Broadcast />
+      <NotifyFormatSettings />
     </div>
   );
 }

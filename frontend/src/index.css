@@ -53,6 +53,14 @@
     @apply bg-primary border-primary;
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3E%3C/svg%3E");
   }
+  .ks-radio {
+    @apply w-5 h-5 rounded-full border-2 border-border bg-bg-input cursor-pointer transition-colors focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg-card;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+  .ks-radio:checked {
+    @apply border-primary bg-primary;
+  }
   .nav-tab {
     @apply px-4 py-2 text-sm font-medium rounded-lg transition-all flex items-center gap-2 font-body font-semibold;
   }

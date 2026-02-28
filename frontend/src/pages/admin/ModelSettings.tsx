@@ -135,9 +135,16 @@ export default function ModelSettings() {
           {models.length === 0 ? (
             <p className="text-sm text-text-muted">{t("admin.noModels")}</p>
           ) : (
-            <ul className="space-y-1.5">
+            <ul className="space-y-2">
               {models.map((name) => (
-                <li key={name} className="flex items-center gap-2">
+                <li
+                  key={name}
+                  className={`flex items-center gap-3 rounded-xl border-2 px-4 py-3 transition-colors ${
+                    selected === name
+                      ? "border-primary bg-primary/10"
+                      : "border-border-dark bg-bg-tertiary/50 hover:border-border"
+                  }`}
+                >
                   <input
                     type="radio"
                     name="model"
@@ -145,15 +152,21 @@ export default function ModelSettings() {
                     value={name}
                     checked={selected === name}
                     onChange={() => setSelected(name)}
-                    className="rounded border-border-dark"
+                    className="ks-radio shrink-0"
                   />
-                  <label htmlFor={`model-${name}`} className="flex-1 truncate text-sm">
+                  <label
+                    htmlFor={`model-${name}`}
+                    className="min-w-0 flex-1 cursor-pointer truncate text-sm font-medium text-text-primary"
+                  >
                     {name}
                   </label>
                   <button
                     type="button"
-                    onClick={() => onDelete(name)}
-                    className="ks-btn text-sm text-red-500 hover:text-red-400"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      onDelete(name);
+                    }}
+                    className="shrink-0 text-sm text-red-500 hover:text-red-400 transition-colors"
                   >
                     {t("admin.delete")}
                   </button>
