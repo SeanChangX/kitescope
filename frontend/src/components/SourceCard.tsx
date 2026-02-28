@@ -69,6 +69,12 @@ function bucketLabelLocal(key: string): string {
   return d.toLocaleString(undefined, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
+/** Display kite count: at most one decimal, no long float. */
+function formatKiteCount(n: number): string {
+  const r = Math.round(n * 10) / 10;
+  return r % 1 === 0 ? String(Math.round(r)) : r.toFixed(1);
+}
+
 type Source = {
   id: number;
   name: string;
@@ -253,7 +259,7 @@ export default function SourceCard({ source, count, previewTick, staggerIndex = 
             </span>
           ) : (
             <span className="text-lg font-semibold text-primary shrink-0">
-              {frameCount != null ? `${frameCount} kites` : count != null ? `${count.count} kites` : "—"}
+              {frameCount != null ? `${formatKiteCount(frameCount)} kites` : count != null ? `${formatKiteCount(count.count)} kites` : "—"}
             </span>
           )}
         </div>
@@ -322,7 +328,7 @@ export default function SourceCard({ source, count, previewTick, staggerIndex = 
                     borderRadius: "6px",
                     fontSize: "12px",
                   }}
-                  formatter={(v: number) => [v, "kites"]}
+                  formatter={(v: number) => [formatKiteCount(Number(v)), "kites"]}
                   labelFormatter={(label: string) => label}
                 />
                 <Line
