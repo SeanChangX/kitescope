@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { userFetch } from "../lib/auth";
 import { useI18n } from "../lib/i18n";
 
@@ -47,7 +48,7 @@ export default function SuggestForm({ onSuccess, hasUser: _hasUser }: Props) {
         setName("");
         onSuccess?.();
       } else {
-        setMessage(data.detail || t("suggest.failed"));
+        setMessage(r.status === 401 ? t("suggest.loginRequired") : (data.detail || t("suggest.failed")));
       }
     } catch {
       setMessage(t("suggest.networkError"));
@@ -111,7 +112,17 @@ export default function SuggestForm({ onSuccess, hasUser: _hasUser }: Props) {
           {nameError && <p className="mt-1 text-xs text-ks-danger">{nameError}</p>}
         </div>
       </div>
-      {message && <p className="mt-2 text-sm text-text-secondary">{message}</p>}
+      {message && (
+        <p className="mt-2 text-sm text-text-secondary">
+          {message}
+          {message === t("suggest.loginRequired") && (
+            <>
+              {" "}
+              <Link to="/login" className="text-primary hover:underline">{t("nav.login")}</Link>
+            </>
+          )}
+        </p>
+      )}
       <button type="submit" disabled={loading || !canSubmit} className="ks-btn ks-btn-primary mt-3 disabled:opacity-50">
         {loading ? t("suggest.submitting") : t("suggest.submit")}
       </button>

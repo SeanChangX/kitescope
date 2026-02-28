@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import SuggestForm from "./SuggestForm";
 import SourceCard from "../components/SourceCard";
 import AppHeader from "../components/AppHeader";
 import { useI18n } from "../lib/i18n";
-import { getUserToken } from "../lib/auth";
 
 const API = "/api";
 
@@ -41,19 +39,6 @@ export default function GuestView() {
   const [counts, setCounts] = useState<Counts>({});
   const [previewTick, setPreviewTick] = useState(0);
   const [userCoords, setUserCoords] = useState<{ lat: number; lon: number } | null>(null);
-  const [canSuggest, setCanSuggest] = useState<boolean | null>(getUserToken() ? null : false);
-
-  useEffect(() => {
-    const token = getUserToken();
-    if (!token) {
-      setCanSuggest(false);
-      return;
-    }
-    fetch(`${API}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setCanSuggest(d?.user_id != null))
-      .catch(() => setCanSuggest(false));
-  }, []);
 
   function refreshSources() {
     fetch(`${API}/sources`)
@@ -148,18 +133,7 @@ export default function GuestView() {
           <p className="text-sm text-text-muted mb-6 max-w-xl">
             {t("home.suggestDesc")}
           </p>
-          {canSuggest === true ? (
-            <SuggestForm onSuccess={refreshSources} />
-          ) : canSuggest === false ? (
-            <div className="ks-card">
-              <p className="text-text-secondary mb-3">{t("suggest.loginRequired")}</p>
-              <Link to="/login" className="ks-btn ks-btn-primary">
-                {t("nav.login")}
-              </Link>
-            </div>
-          ) : (
-            <div className="ks-card text-text-muted">{t("common.loading")}</div>
-          )}
+          <SuggestForm onSuccess={refreshSources} />
         </section>
       </main>
     </div>
