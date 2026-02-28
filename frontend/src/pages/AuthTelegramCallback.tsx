@@ -12,6 +12,7 @@ export default function AuthTelegramCallback() {
 
   useEffect(() => {
     // Telegram redirects to auth_url with params in query string (?id=...&hash=...)
+    // Only include params that are actually in the URL so the backend's data-check-string matches what Telegram signed.
     const hash = searchParams.get("hash");
     const id = searchParams.get("id");
     if (!hash || !id) {
@@ -19,16 +20,17 @@ export default function AuthTelegramCallback() {
       setError("Invalid Telegram callback data.");
       return;
     }
-    const body = {
-      id: parseInt(id, 10),
-      first_name: searchParams.get("first_name") || "",
-      last_name: searchParams.get("last_name") || "",
-      username: searchParams.get("username") || "",
-      photo_url: searchParams.get("photo_url") || "",
-      auth_date: parseInt(searchParams.get("auth_date") || "0", 10),
-      hash,
-    };
-    if (isNaN(body.id)) {
+    const body: Record<string, string | number> = { hash };
+    searchParams.forEach((value, key) => {
+      if (key === "hash") return;
+      if (key === "id" || key === "auth_date") {
+        const n = parseInt(value, 10);
+        if (!isNaN(n)) body[key] = n;
+      } else {
+        body[key] = value;
+      }
+    });
+    if (typeof body.id !== "number" || body.id === undefined) {
       setStatus("error");
       setError("Invalid user id.");
       return;

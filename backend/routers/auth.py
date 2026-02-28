@@ -191,10 +191,13 @@ async def telegram_verify(
     if not row or not row.value:
         raise HTTPException(status_code=400, detail="Telegram not configured")
     bot_token = row.value.strip()
-    data_check = "\n".join(f"{k}={v}" for k, v in sorted(body.items()))
+    # data-check-string: alphabetical order, values as string (match Telegram redirect)
+    data_pairs = sorted((k, str(v)) for k, v in body.items())
+    data_check = "\n".join(f"{k}={v}" for k, v in data_pairs)
     secret_key = hashlib.sha256(bot_token.encode()).digest()
     expected = hmac.new(secret_key, data_check.encode(), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(expected, hash_val):
+    hash_hex = str(hash_val).strip().lower()
+    if not hmac.compare_digest(expected, hash_hex):
         raise HTTPException(status_code=400, detail="Invalid Telegram data")
     user_id_raw = body.get("id")
     if user_id_raw is None:

@@ -183,7 +183,7 @@ const messages: Record<Locale, Record<string, string>> = {
     "suggest.submitting": "送出中…",
     "login.title": "登入",
     "login.telegram": "使用 Telegram 登入",
-    "login.line": "使用 LINE 登入",
+    "login.line": "Log in with LINE",
     "login.lineUnavailable": "LINE 登入：不可用",
     "login.telegramUnavailable": "Telegram 登入：不可用",
     "login.signIn": "登入",

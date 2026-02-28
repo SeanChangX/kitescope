@@ -9,6 +9,7 @@ export default function AppHeader() {
   const { t, locale, setLocale } = useI18n();
   const location = useLocation();
   const [user, setUser] = useState<UserInfo>(null);
+  const isHomePage = location.pathname === "/";
   const isNotificationsPage = location.pathname === "/notifications";
 
   useEffect(() => {
@@ -62,12 +63,14 @@ export default function AppHeader() {
           </div>
           {user ? (
             <>
+              {!isHomePage && (
               <Link
                 to="/"
                 className="text-xs rounded-md border border-border-dark px-2 py-1 text-text-secondary transition-all duration-200 hover:border-primary hover:text-primary sm:text-sm sm:px-3 sm:py-1.5"
               >
                 {t("nav.home")}
               </Link>
+              )}
               {!isNotificationsPage && (
               <Link
                 to="/notifications"
