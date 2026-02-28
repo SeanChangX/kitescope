@@ -4,17 +4,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
 from datetime import datetime
-import os
 
 from database import get_db
 from models import Source, CountHistory
+from secret_config import get_internal_secret
 
 router = APIRouter()
-INTERNAL_SECRET = os.getenv("INTERNAL_SECRET", "")
 
 
 def _check_internal(x_internal_secret: str | None = Header(None, alias="X-Internal-Secret")):
-    if INTERNAL_SECRET and x_internal_secret != INTERNAL_SECRET:
+    secret = get_internal_secret()
+    if secret and x_internal_secret != secret:
         raise HTTPException(status_code=403, detail="Forbidden")
 
 

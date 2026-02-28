@@ -4,13 +4,26 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from database import init_db
+from database import init_db, AsyncSessionLocal
 from routers import public, admin, auth, internal, user_notifications
 from notification_worker import start_worker
+from auth_admin import set_secret_key
+from secret_config import get_or_create_secret_key, ensure_internal_secret_file
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    # SECRET_KEY: use env, or get/create from DB (auto-generated on first run; backup carries it)
+    effective = os.getenv("SECRET_KEY", "").strip()
+    if not effective:
+        async with AsyncSessionLocal() as session:
+            effective = await get_or_create_secret_key(session)
+            await session.commit()
+        set_secret_key(effective)
+    else:
+        set_secret_key(effective)
+    # INTERNAL_SECRET: if unset and INTERNAL_SECRET_FILE set, create file with random secret so vision can read it
+    ensure_internal_secret_file()
     task = start_worker()
     yield
     if task is not None and not task.done():

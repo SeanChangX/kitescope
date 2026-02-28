@@ -12,11 +12,23 @@ from database import get_db
 from models import AdminUser, User
 from user_activity import update_user_activity
 
-SECRET_KEY = os.getenv("SECRET_KEY", "change-me-dev")
+# Set at startup from env or auto-generated (persisted in DB). No predictable default.
+_runtime_secret_key: str = ""
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 
 security = HTTPBearer(auto_error=False)
+
+
+def set_secret_key(key: str) -> None:
+    global _runtime_secret_key
+    _runtime_secret_key = key or ""
+
+
+def get_secret_key() -> str:
+    """JWT signing key: env SECRET_KEY, or value set at startup (from DB / auto-generated)."""
+    return os.getenv("SECRET_KEY") or _runtime_secret_key or "change-me-dev"
 
 
 def hash_password(password: str) -> str:
@@ -38,14 +50,14 @@ def verify_password(plain: str, hashed: str) -> bool:
 def create_access_token(subject: str) -> str:
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode = {"sub": subject, "exp": expire, "type": "admin"}
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(to_encode, get_secret_key(), algorithm=ALGORITHM)
 
 
 def create_user_access_token(user_id: int, channel: str = "telegram") -> str:
     """Create JWT for end-user. channel is the login method: 'line' or 'telegram', used for notification subscription."""
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode = {"sub": str(user_id), "exp": expire, "type": "user", "channel": channel}
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(to_encode, get_secret_key(), algorithm=ALGORITHM)
 
 
 def get_notification_channel(
@@ -55,7 +67,7 @@ def get_notification_channel(
     if not credentials or not credentials.credentials:
         return None
     try:
-        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(credentials.credentials, get_secret_key(), algorithms=[ALGORITHM])
         if payload.get("type") != "user":
             return None
         ch = (payload.get("channel") or "").lower()
@@ -80,7 +92,7 @@ async def get_current_admin(
     if not credentials or credentials.credentials is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
-        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(credentials.credentials, get_secret_key(), algorithms=[ALGORITHM])
         username = payload.get("sub")
         if not username or payload.get("type") != "admin":
             raise HTTPException(status_code=401, detail="Invalid token")
@@ -107,7 +119,7 @@ async def get_current_user_optional(
     if not credentials or not credentials.credentials:
         return None
     try:
-        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(credentials.credentials, get_secret_key(), algorithms=[ALGORITHM])
         if payload.get("type") != "user":
             return None
         user_id = payload.get("sub")

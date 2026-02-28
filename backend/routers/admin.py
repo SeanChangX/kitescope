@@ -497,6 +497,8 @@ _BOT_KEYS = (
     "line_login_channel_id", "line_login_channel_secret", "telegram_bot_token",
     "public_app_url",
 )
+# Include secret_key in backup/restore so migration carries JWT key; never exposed in GET /settings/bots
+_BOT_KEYS_BACKUP = _BOT_KEYS + ("secret_key",)
 
 
 @router.get("/settings/backup")
@@ -509,7 +511,7 @@ async def backup_settings(
     source_rows = (await db.execute(select(Source).order_by(Source.id))).scalars().all()
     user_rows = (await db.execute(select(User).order_by(User.id))).scalars().all()
     sub_rows = (await db.execute(select(NotificationSubscription).order_by(NotificationSubscription.id))).scalars().all()
-    bot_rows = (await db.execute(select(BotConfig).where(BotConfig.key.in_(_BOT_KEYS)))).scalars().all()
+    bot_rows = (await db.execute(select(BotConfig).where(BotConfig.key.in_(_BOT_KEYS_BACKUP)))).scalars().all()
     history_rows = (await db.execute(select(BotConfig).where(BotConfig.key.in_(["history_retention_days", "history_default_interval"])))).scalars().all()
     by_key = {r.key: r.value for r in history_rows}
     return {
@@ -651,7 +653,7 @@ async def restore_settings(
     # Upsert bot_config
     now = datetime.utcnow()
     for item in bot_config:
-        if not isinstance(item, dict) or item.get("key") not in _BOT_KEYS:
+        if not isinstance(item, dict) or item.get("key") not in _BOT_KEYS_BACKUP:
             continue
         key, value = item.get("key"), item.get("value", "")
         r = await db.execute(select(BotConfig).where(BotConfig.key == key))

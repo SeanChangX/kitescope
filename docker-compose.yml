@@ -33,8 +33,7 @@ services:
       - kitescope_data:/app/data
     environment:
       - DATABASE_URL=sqlite:////app/data/kitescope.db
-      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
-      - INTERNAL_SECRET=${INTERNAL_SECRET:-}
+      - INTERNAL_SECRET_FILE=/app/data/internal_secret
       - GO2RTC_BASE_URL=http://go2rtc:1984
       - VISION_URL=http://vision:9000
     env_file:
@@ -56,7 +55,7 @@ services:
     environment:
       - GO2RTC_BASE_URL=http://go2rtc:1984
       - BACKEND_URL=http://backend:8000
-      - INTERNAL_SECRET=${INTERNAL_SECRET:-}
+      - INTERNAL_SECRET_FILE=/app/data/internal_secret
       - MODEL_PATH=/app/models/kite_nano.onnx
       - CONFIDENCE_THRESHOLD=0.5
       - SKIP_FRAMES=3

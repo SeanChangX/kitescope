@@ -3,6 +3,8 @@ import hashlib
 import hmac
 import json
 import os
+import secrets
+import time
 from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
@@ -30,6 +32,18 @@ router = APIRouter()
 LINE_AUTH_URL = "https://access.line.me/oauth2/v2.1/authorize"
 LINE_TOKEN_URL = "https://api.line.me/oauth2/v2.1/token"
 LINE_PROFILE_URL = "https://api.line.me/v2/profile"
+
+# LINE OAuth state: store generated state with timestamp; verify in callback to prevent CSRF/session mix-up
+_LINE_STATE_TTL_SEC = 600
+_line_states: dict[str, float] = {}
+
+
+def _line_state_cleanup() -> None:
+    now = time.monotonic()
+    expired = [k for k, t in _line_states.items() if now - t > _LINE_STATE_TTL_SEC]
+    for k in expired:
+        del _line_states[k]
+
 
 def _origin_from_url(url: str) -> str | None:
     """Return origin (scheme + lowercase host) from a URL, or None."""
@@ -91,7 +105,6 @@ def _line_login_credentials(by_key: dict) -> tuple[str, str]:
 @router.get("/line/login-url")
 async def line_login_url(
     redirect_uri: str = "",
-    state: str = "",
     db: AsyncSession = Depends(get_db),
 ):
     """Return LINE authorization URL. redirect_uri must be the frontend callback (e.g. /auth/callback)."""
@@ -105,21 +118,25 @@ async def line_login_url(
     if not channel_id or not redirect_uri:
         raise HTTPException(status_code=400, detail="LINE not configured or redirect_uri required")
     _validate_line_redirect_uri(redirect_uri, by_key)
+    _line_state_cleanup()
+    state = secrets.token_urlsafe(16)
+    _line_states[state] = time.monotonic()
     import urllib.parse
     params = {
         "response_type": "code",
         "client_id": channel_id,
         "redirect_uri": redirect_uri,
-        "state": state or "line",
+        "state": state,
         "scope": "profile openid email",
     }
     url = LINE_AUTH_URL + "?" + urllib.parse.urlencode(params)
-    return {"url": url}
+    return {"url": url, "state": state}
 
 
 class LineCallbackBody(BaseModel):
     code: str
     redirect_uri: str
+    state: str = ""
 
 
 @router.post("/line/callback")
@@ -139,6 +156,10 @@ async def line_callback(
     if not channel_id or not channel_secret or not body.code or not body.redirect_uri:
         raise HTTPException(status_code=400, detail="Invalid request or LINE not configured")
     _validate_line_redirect_uri(body.redirect_uri, by_key)
+    _line_state_cleanup()
+    if not body.state or body.state not in _line_states:
+        raise HTTPException(status_code=400, detail="Invalid or expired state, try logging in again")
+    del _line_states[body.state]
     async with httpx.AsyncClient(timeout=10.0) as client:
         token_r = await client.post(
             LINE_TOKEN_URL,
@@ -252,6 +273,17 @@ async def telegram_verify(
     hash_hex = str(hash_val).strip().lower()
     if not hmac.compare_digest(expected, hash_hex):
         raise HTTPException(status_code=400, detail="Invalid Telegram data")
+    # Reject old auth data (replay). Telegram: auth_date not older than 24 hours.
+    auth_date = body.get("auth_date")
+    if auth_date is None:
+        raise HTTPException(status_code=400, detail="auth_date missing")
+    try:
+        auth_ts = int(auth_date)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid auth_date")
+    now_ts = int(time.time())
+    if auth_ts > now_ts + 60 or now_ts - auth_ts > 86400:
+        raise HTTPException(status_code=400, detail="Telegram login expired, try again")
     user_id_raw = body.get("id")
     if user_id_raw is None:
         raise HTTPException(status_code=400, detail="id missing")

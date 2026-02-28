@@ -12,6 +12,7 @@ export default function AuthCallback() {
 
   useEffect(() => {
     const code = searchParams.get("code");
+    const state = searchParams.get("state") ?? "";
     if (!code) {
       setStatus("error");
       setError("No authorization code.");
@@ -21,7 +22,7 @@ export default function AuthCallback() {
     fetch(`${API}/auth/line/callback`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code, redirect_uri: redirectUri }),
+      body: JSON.stringify({ code, redirect_uri: redirectUri, state }),
     })
       .then((r) => r.json().catch(() => ({})))
       .then((data) => {

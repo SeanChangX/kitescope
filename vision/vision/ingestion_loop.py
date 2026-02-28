@@ -6,7 +6,24 @@ from vision.adapters import get_adapter, detect_source_type
 from vision.detector import detect
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://backend:8000")
-INTERNAL_SECRET = os.getenv("INTERNAL_SECRET", "")
+
+
+def _get_internal_secret() -> str:
+    """INTERNAL_SECRET from env or shared file (when backend auto-generated it)."""
+    v = os.getenv("INTERNAL_SECRET", "").strip()
+    if v:
+        return v
+    path = os.getenv("INTERNAL_SECRET_FILE", "").strip()
+    if path and os.path.isfile(path):
+        try:
+            with open(path) as f:
+                return f.read().strip()
+        except OSError:
+            pass
+    return ""
+
+
+INTERNAL_SECRET = _get_internal_secret()
 INTERVAL_SEC = int(os.getenv("VISION_LOOP_INTERVAL_SEC", "30"))
 SKIP_FRAMES = int(os.getenv("SKIP_FRAMES", "3"))
 EMA_ALPHA = float(os.getenv("EMA_ALPHA", "0.3"))
