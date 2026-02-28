@@ -10,17 +10,12 @@ def format_kite_notification(
     weather: str | None = None,
     view_url: str | None = None,
 ) -> str:
-    """Build a bot-style notification: friendly tone, optional view link."""
-    lines = [
-        "──────",
-        f"  Spotted {int(count)} kites at {place}.",
-    ]
+    """Build a bot-style notification: short lines, no indent."""
+    lines = [f"Spotted {int(count)} kites at {place}."]
     if weather:
-        lines.append(f"  Weather: {weather}.")
+        lines.append(f"Weather: {weather}.")
     if view_url and view_url.strip():
-        lines.append("")
-        lines.append(f"  View live: {view_url.strip()}")
-    lines.append("──────")
+        lines.append(f"View live: {view_url.strip()}")
     return "\n".join(lines)
 
 

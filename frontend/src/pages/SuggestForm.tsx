@@ -96,7 +96,7 @@ export default function SuggestForm({ onSuccess, hasUser: _hasUser }: Props) {
         </div>
         <div>
           <label className="block text-sm font-medium text-text-secondary mb-1">
-            {t("suggest.namePlaceholder")}
+            {t("suggest.nameLabel")}
           </label>
           <input
             type="text"
