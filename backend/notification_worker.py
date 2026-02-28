@@ -61,7 +61,8 @@ async def _run_once() -> None:
             place = source.name or source.location or "stream"
             weather_str = await get_weather_for_location(source.location or "")
             view_url = (by_key.get("public_app_url") or os.getenv("PUBLIC_APP_URL") or "").strip().rstrip("/") or None
-            msg = format_kite_notification(int(count), place, weather_str or None, view_url)
+            template = (by_key.get("notify_format_template") or "").strip() or None
+            msg = format_kite_notification(int(count), place, weather_str or None, view_url, template=template)
             channel = (sub.channel or "telegram").lower()
             sent = False
             if channel == "line" and user.line_id and line_token:

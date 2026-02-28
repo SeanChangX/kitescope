@@ -3,20 +3,37 @@ import httpx
 
 LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push"
 
+DEFAULT_NOTIFY_FORMAT = (
+    "[ Spotted {count} kites ] [ {place} ]\n"
+    "Weather: {weather}\n"
+    "{view_url}"
+)
+
 
 def format_kite_notification(
     count: int,
     place: str,
     weather: str | None = None,
     view_url: str | None = None,
+    template: str | None = None,
 ) -> str:
-    """Build a bot-style notification: short lines, no indent."""
-    lines = [f"Spotted {int(count)} kites at {place}."]
-    if weather:
-        lines.append(f"Weather: {weather}.")
-    if view_url and view_url.strip():
-        lines.append(f"View live: {view_url.strip()}")
-    return "\n".join(lines)
+    """Build a bot-style notification from template. Placeholders: {count}, {place}, {weather}, {view_url}."""
+    tpl = (template or "").strip() or DEFAULT_NOTIFY_FORMAT
+    weather_s = (weather or "").strip()
+    view_s = (view_url or "").strip()
+    text = tpl.format(
+        count=int(count),
+        place=(place or "").strip() or "stream",
+        weather=weather_s,
+        view_url=view_s,
+    )
+    lines = []
+    for line in text.splitlines():
+        s = line.rstrip()
+        if s == "Weather: " or s == "Weather:":
+            continue
+        lines.append(s)
+    return "\n".join(lines).strip()
 
 
 TELEGRAM_SEND_URL = "https://api.telegram.org/bot{token}/sendMessage"

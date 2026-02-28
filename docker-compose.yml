@@ -38,9 +38,12 @@ services:
       - VISION_URL=http://vision:9000
     env_file:
       - .env
-    depends_on:
-      vision:
-        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   vision:
     build:
@@ -69,7 +72,10 @@ services:
       retries: 5
       start_period: 10s
     depends_on:
-      - go2rtc
+      backend:
+        condition: service_healthy
+      go2rtc:
+        condition: service_started
 
   go2rtc:
     image: alexxit/go2rtc:latest

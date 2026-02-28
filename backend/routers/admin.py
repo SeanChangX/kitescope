@@ -10,6 +10,7 @@ from models import Source, PendingSource, User, AdminUser, BotConfig, CountHisto
 from auth_admin import get_current_admin
 from utils import should_proxy_via_go2rtc
 from go2rtc_client import register_go2rtc_stream_by_name, delete_go2rtc_stream
+from notify import DEFAULT_NOTIFY_FORMAT
 
 router = APIRouter()
 
@@ -401,6 +402,40 @@ async def get_bot_settings(
     }
 
 
+@router.get("/settings/notify-format")
+async def get_notify_format(
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(_admin_only),
+):
+    result = await db.execute(select(BotConfig).where(BotConfig.key == "notify_format_template"))
+    row = result.scalar_one_or_none()
+    value = (row.value or "").strip() if row else ""
+    return {"format": value or DEFAULT_NOTIFY_FORMAT}
+
+
+class NotifyFormatBody(BaseModel):
+    format: str | None = None
+
+
+@router.put("/settings/notify-format")
+async def put_notify_format(
+    body: NotifyFormatBody,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(_admin_only),
+):
+    now = datetime.utcnow()
+    value = (body.format or "").strip() or ""
+    r = await db.execute(select(BotConfig).where(BotConfig.key == "notify_format_template"))
+    row = r.scalar_one_or_none()
+    if row:
+        row.value = value
+        row.updated_at = now
+    else:
+        db.add(BotConfig(key="notify_format_template", value=value, updated_at=now))
+    await db.flush()
+    return {"message": "Saved"}
+
+
 class BotSettingsBody(BaseModel):
     line_channel_id: str | None = None
     line_channel_secret: str | None = None
@@ -479,7 +514,7 @@ async def put_history_settings(
             row.updated_at = now
         else:
             db.add(BotConfig(key="history_retention_days", value=str(body.retention_days), updated_at=now))
-    if body.default_interval is not None and body.default_interval in ("minute", "hour", "day"):
+    if body.default_interval is not None and body.default_interval in ("minute", "hour", "day", "5min", "10min", "30min"):
         r = await db.execute(select(BotConfig).where(BotConfig.key == "history_default_interval"))
         row = r.scalar_one_or_none()
         if row:
@@ -512,7 +547,7 @@ async def backup_settings(
     user_rows = (await db.execute(select(User).order_by(User.id))).scalars().all()
     sub_rows = (await db.execute(select(NotificationSubscription).order_by(NotificationSubscription.id))).scalars().all()
     bot_rows = (await db.execute(select(BotConfig).where(BotConfig.key.in_(_BOT_KEYS_BACKUP)))).scalars().all()
-    history_rows = (await db.execute(select(BotConfig).where(BotConfig.key.in_(["history_retention_days", "history_default_interval"])))).scalars().all()
+    history_rows = (await db.execute(select(BotConfig).where(BotConfig.key.in_(["history_retention_days", "history_default_interval", "notify_format_template"])))).scalars().all()
     by_key = {r.key: r.value for r in history_rows}
     return {
         "version": _BACKUP_VERSION,
@@ -543,6 +578,7 @@ async def backup_settings(
             "retention_days": int(by_key.get("history_retention_days") or "30"),
             "default_interval": by_key.get("history_default_interval") or "hour",
         },
+        "notify_format": by_key.get("notify_format_template") or "",
     }
 
 
@@ -676,7 +712,7 @@ async def restore_settings(
             else:
                 db.add(BotConfig(key="history_retention_days", value=str(int(rd)), updated_at=now))
         di = history_settings.get("default_interval")
-        if di in ("minute", "hour", "day"):
+        if di in ("minute", "hour", "day", "5min", "10min", "30min"):
             r = await db.execute(select(BotConfig).where(BotConfig.key == "history_default_interval"))
             row = r.scalar_one_or_none()
             if row:
@@ -684,5 +720,15 @@ async def restore_settings(
                 row.updated_at = now
             else:
                 db.add(BotConfig(key="history_default_interval", value=di, updated_at=now))
+    notify_format = data.get("notify_format")
+    if notify_format is not None:
+        v = (notify_format if isinstance(notify_format, str) else "").strip()
+        r = await db.execute(select(BotConfig).where(BotConfig.key == "notify_format_template"))
+        row = r.scalar_one_or_none()
+        if row:
+            row.value = v
+            row.updated_at = now
+        else:
+            db.add(BotConfig(key="notify_format_template", value=v, updated_at=now))
     await db.flush()
     return {"message": "Restored"}

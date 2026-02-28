@@ -11,12 +11,14 @@ import HistorySettings from "./HistorySettings";
 import BackupRestore from "./BackupRestore";
 import UserList from "./UserList";
 import Broadcast from "./Broadcast";
+import NotifyFormatSettings from "./NotifyFormatSettings";
 
 function AdminDashboard() {
   const { t } = useI18n();
   return (
     <div className="space-y-6">
       <h2 className="font-gaming text-xl font-semibold text-text-primary">{t("admin.dashboard")}</h2>
+      <NotifyFormatSettings />
       <PendingSources />
       <Broadcast />
     </div>

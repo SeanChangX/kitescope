@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { authFetch } from "../../lib/auth";
 import { useI18n } from "../../lib/i18n";
 
+type IntervalValue = "minute" | "5min" | "10min" | "30min" | "hour" | "day";
+
 export default function HistorySettings() {
   const { t } = useI18n();
   const [retentionDays, setRetentionDays] = useState(30);
-  const [defaultInterval, setDefaultInterval] = useState<"minute" | "hour" | "day">("hour");
+  const [defaultInterval, setDefaultInterval] = useState<IntervalValue>("hour");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -15,8 +17,9 @@ export default function HistorySettings() {
       .then((d) => {
         if (d) {
           setRetentionDays(d.retention_days ?? 30);
+          const di = d.default_interval;
           setDefaultInterval(
-            d.default_interval === "minute" || d.default_interval === "day" ? d.default_interval : "hour"
+            ["minute", "5min", "10min", "30min", "hour", "day"].includes(di) ? di : "hour"
           );
         }
       })
@@ -56,10 +59,13 @@ export default function HistorySettings() {
           <label className="block text-sm text-text-muted mb-1">{t("admin.defaultIntervalGuestHistory")}</label>
           <select
             value={defaultInterval}
-            onChange={(e) => setDefaultInterval(e.target.value as "minute" | "hour" | "day")}
+            onChange={(e) => setDefaultInterval(e.target.value as IntervalValue)}
             className="ks-input"
           >
             <option value="minute">{t("admin.intervalMinute")}</option>
+            <option value="5min">{t("admin.interval5min")}</option>
+            <option value="10min">{t("admin.interval10min")}</option>
+            <option value="30min">{t("admin.interval30min")}</option>
             <option value="hour">{t("admin.intervalHour")}</option>
             <option value="day">{t("admin.intervalDay")}</option>
           </select>

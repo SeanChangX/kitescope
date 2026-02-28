@@ -155,8 +155,9 @@ async def send_test_notification(
     line_token = (by_key.get("line_channel_access_token") or "").strip()
     telegram_token = (by_key.get("telegram_bot_token") or "").strip()
     view_url = (by_key.get("public_app_url") or "").strip().rstrip("/") or None
+    template = (by_key.get("notify_format_template") or "").strip() or None
     channel_lower = channel.lower()
-    msg = format_kite_notification(5, "Test stream", "Clear, 22 C", view_url)
+    msg = format_kite_notification(5, "Test stream", "Clear, 22 C", view_url, template=template)
     if channel_lower == "line":
         if not user.line_id or not line_token:
             raise HTTPException(status_code=400, detail="LINE not linked or bot not configured")

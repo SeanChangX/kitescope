@@ -130,7 +130,7 @@ async def get_history(
     source_id: int | None = None,
     from_ts: datetime | None = Query(None, alias="from"),
     to_ts: datetime | None = Query(None, alias="to"),
-    interval: str = Query("hour", pattern="^(minute|hour|day)$"),
+    interval: str = Query("hour", pattern="^(minute|hour|day|5min|10min|30min)$"),
     db: AsyncSession = Depends(get_db),
 ):
     if from_ts is None:
