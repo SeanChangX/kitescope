@@ -13,8 +13,11 @@ router = APIRouter()
 
 
 def _check_internal(x_internal_secret: str | None = Header(None, alias="X-Internal-Secret")):
+    """Fail-closed: require non-empty secret and matching header; reject when secret unavailable."""
     secret = get_internal_secret()
-    if secret and x_internal_secret != secret:
+    if not secret:
+        raise HTTPException(status_code=503, detail="Internal API not configured")
+    if x_internal_secret != secret:
         raise HTTPException(status_code=403, detail="Forbidden")
 
 

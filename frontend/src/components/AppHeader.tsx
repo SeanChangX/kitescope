@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { userFetch, clearUserToken, getUserToken, USER_SESSION_EXPIRED_EVENT } from "../lib/auth";
+import { userFetch, logoutUser, USER_SESSION_EXPIRED_EVENT } from "../lib/auth";
 import { useI18n } from "../lib/i18n";
 import { useEffect, useState } from "react";
 
@@ -9,16 +9,11 @@ export default function AppHeader() {
   const { t, locale, setLocale } = useI18n();
   const location = useLocation();
   const [user, setUser] = useState<UserInfo>(null);
-  const [authChecked, setAuthChecked] = useState(!getUserToken());
+  const [authChecked, setAuthChecked] = useState(false);
   const isHomePage = location.pathname === "/";
   const isNotificationsPage = location.pathname === "/notifications";
 
   useEffect(() => {
-    if (!getUserToken()) {
-      setUser(null);
-      setAuthChecked(true);
-      return;
-    }
     userFetch("/api/auth/me")
       .then((r) => r.json().catch(() => null))
       .then((d) => (d?.user_id != null ? { user_id: d.user_id, display_name: d.display_name || "", avatar: d.avatar || "" } : null))
@@ -34,7 +29,6 @@ export default function AppHeader() {
 
   useEffect(() => {
     function onSessionExpired() {
-      clearUserToken();
       setUser(null);
     }
     window.addEventListener(USER_SESSION_EXPIRED_EVENT, onSessionExpired);
@@ -42,8 +36,7 @@ export default function AppHeader() {
   }, []);
 
   function handleLogout() {
-    clearUserToken();
-    setUser(null);
+    logoutUser().then(() => setUser(null));
   }
 
   return (

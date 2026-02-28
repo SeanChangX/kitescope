@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Routes, Route, Link, NavLink } from "react-router-dom";
-import { getAdminToken, clearAdminToken, ADMIN_SESSION_EXPIRED_EVENT } from "../../lib/auth";
+import { authFetch, logoutAdmin, ADMIN_SESSION_EXPIRED_EVENT } from "../../lib/auth";
 import { useI18n } from "../../lib/i18n";
 import AdminLogin from "./AdminLogin";
 import PendingSources from "./PendingSources";
@@ -42,12 +42,13 @@ export default function AdminLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
-    setLoggedIn(!!getAdminToken());
+    authFetch("/api/admin/settings/bots")
+      .then((r) => setLoggedIn(r.ok))
+      .catch(() => setLoggedIn(false));
   }, []);
 
   useEffect(() => {
     function onSessionExpired() {
-      clearAdminToken();
       setLoggedIn(false);
     }
     window.addEventListener(ADMIN_SESSION_EXPIRED_EVENT, onSessionExpired);
@@ -59,8 +60,7 @@ export default function AdminLayout() {
   }
 
   function handleLogout() {
-    clearAdminToken();
-    setLoggedIn(false);
+    logoutAdmin().then(() => setLoggedIn(false));
   }
 
   if (loggedIn === null) return null;

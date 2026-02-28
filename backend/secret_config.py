@@ -12,8 +12,13 @@ SECRET_KEY_BOT_CONFIG_KEY = "secret_key"
 _internal_secret_file_path = os.getenv("INTERNAL_SECRET_FILE", "").strip()
 
 
+def get_internal_secret_file_path() -> str:
+    return _internal_secret_file_path
+
+
 def ensure_internal_secret_file() -> None:
-    """If INTERNAL_SECRET not set and INTERNAL_SECRET_FILE set, create file with random secret if missing."""
+    """If INTERNAL_SECRET not set and INTERNAL_SECRET_FILE set, create file with random secret if missing.
+    Raises RuntimeError when INTERNAL_SECRET_FILE is set but we cannot create or read a secret (fail-closed)."""
     if os.getenv("INTERNAL_SECRET", "").strip():
         return
     if not _internal_secret_file_path:
@@ -23,12 +28,18 @@ def ensure_internal_secret_file() -> None:
     try:
         with open(_internal_secret_file_path, "w") as f:
             f.write(secrets.token_hex(32))
-    except OSError:
-        pass
+    except OSError as e:
+        raise RuntimeError(
+            f"INTERNAL_SECRET_FILE is set but failed to create {_internal_secret_file_path}: {e}"
+        ) from e
+    if not get_internal_secret():
+        raise RuntimeError(
+            f"INTERNAL_SECRET_FILE created but failed to read {_internal_secret_file_path}"
+        )
 
 
 def get_internal_secret() -> str:
-    """Return INTERNAL_SECRET: env, or content of INTERNAL_SECRET_FILE (for backend/vision)."""
+    """Return INTERNAL_SECRET: env, or content of INTERNAL_SECRET_FILE (for backend/vision). Empty on read error."""
     v = os.getenv("INTERNAL_SECRET", "").strip()
     if v:
         return v

@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { setUserToken } from "../lib/auth";
 
 const API = "/api";
 
@@ -23,16 +22,18 @@ export default function AuthCallback() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code, redirect_uri: redirectUri, state }),
+      credentials: "include",
     })
-      .then((r) => r.json().catch(() => ({})))
-      .then((data) => {
-        if (data.access_token) {
-          setUserToken(data.access_token);
+      .then((r) =>
+        r.json().catch(() => ({})).then((data) => ({ ok: r.ok, data }))
+      )
+      .then(({ ok, data }) => {
+        if (ok && data?.token_type === "bearer") {
           setStatus("ok");
           navigate("/", { replace: true });
         } else {
           setStatus("error");
-          setError((data.detail as string) || "Login failed.");
+          setError((data?.detail as string) || "Login failed.");
         }
       })
       .catch(() => {

@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { setAdminToken } from "../../lib/auth";
 
 const API = "/api";
 
@@ -33,10 +32,10 @@ export default function AdminLogin({ onLogin }: Props) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: username.trim(), password }),
+        credentials: "include",
       });
       const data = await r.json().catch(() => ({}));
-      if (r.ok && data.access_token) {
-        setAdminToken(data.access_token);
+      if (r.ok) {
         onLogin();
       } else {
         setError(data.detail || "Setup failed.");
@@ -60,10 +59,10 @@ export default function AdminLogin({ onLogin }: Props) {
       const r = await fetch(`${API}/auth/admin/login`, {
         method: "POST",
         body: form,
+        credentials: "include",
       });
       const data = await r.json().catch(() => ({}));
-      if (r.ok && data.access_token) {
-        setAdminToken(data.access_token);
+      if (r.ok) {
         onLogin();
       } else {
         setError(data.detail || "Login failed.");

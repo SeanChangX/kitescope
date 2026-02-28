@@ -7,6 +7,7 @@ import secrets
 import time
 from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -24,6 +25,9 @@ from auth_admin import (
     get_current_admin,
     get_current_user_optional,
     get_notification_channel,
+    ADMIN_COOKIE,
+    USER_COOKIE,
+    cookie_params,
 )
 from rate_limit import rate_limit_admin_auth
 
@@ -217,7 +221,9 @@ async def line_callback(
     if user.banned:
         raise HTTPException(status_code=403, detail="Account is banned")
     token = create_user_access_token(user.id, "line")
-    return {"access_token": token, "token_type": "bearer", "user_id": user.id}
+    res = JSONResponse(content={"token_type": "bearer", "user_id": user.id})
+    res.set_cookie(key=USER_COOKIE, value=token, **cookie_params())
+    return res
 
 
 @router.get("/telegram/bot-username")
@@ -311,7 +317,17 @@ async def telegram_verify(
     if user.banned:
         raise HTTPException(status_code=403, detail="Account is banned")
     token = create_user_access_token(user.id, "telegram")
-    return {"access_token": token, "token_type": "bearer", "user_id": user.id}
+    res = JSONResponse(content={"token_type": "bearer", "user_id": user.id})
+    res.set_cookie(key=USER_COOKIE, value=token, **cookie_params())
+    return res
+
+
+@router.post("/logout")
+async def user_logout():
+    """Clear user JWT cookie (HttpOnly)."""
+    res = JSONResponse(content={"message": "ok"})
+    res.delete_cookie(USER_COOKIE, path="/")
+    return res
 
 
 @router.get("/me")
@@ -370,7 +386,9 @@ async def admin_setup(
     db.add(admin)
     await db.flush()
     token = create_access_token(admin.username)
-    return {"access_token": token, "token_type": "bearer"}
+    res = JSONResponse(content={"token_type": "bearer"})
+    res.set_cookie(key=ADMIN_COOKIE, value=token, **cookie_params())
+    return res
 
 
 @router.post("/admin/login")
@@ -386,7 +404,17 @@ async def admin_login(
     if not admin or not verify_password(form.password, admin.password_hash):
         raise HTTPException(status_code=401, detail="Invalid username or password")
     token = create_access_token(admin.username)
-    return {"access_token": token, "token_type": "bearer"}
+    res = JSONResponse(content={"token_type": "bearer"})
+    res.set_cookie(key=ADMIN_COOKIE, value=token, **cookie_params())
+    return res
+
+
+@router.post("/admin/logout")
+async def admin_logout():
+    """Clear admin JWT cookie (HttpOnly)."""
+    res = JSONResponse(content={"message": "ok"})
+    res.delete_cookie(ADMIN_COOKIE, path="/")
+    return res
 
 
 class ChangePasswordBody(BaseModel):

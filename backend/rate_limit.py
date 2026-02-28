@@ -2,6 +2,7 @@
 In-memory rate limit for admin auth (login/setup). Per-IP sliding window;
 no lockout, only throttle to avoid burst of requests (e.g. many tabs) causing a ban.
 """
+import os
 import time
 from collections import defaultdict
 from fastapi import Request, HTTPException
@@ -10,17 +11,30 @@ from fastapi import Request, HTTPException
 _ADMIN_AUTH_WINDOW_SEC = 60
 _ADMIN_AUTH_MAX_PER_WINDOW = 20
 
+# Only trust X-Forwarded-For when the direct client is in this set (e.g. reverse proxy, Cloudflare Tunnel).
+# Comma-separated list: 127.0.0.1,::1,172.16.0.0/12 or exact IPs. Unset => use request.client.host only.
+_TRUSTED_PROXY_IPS = frozenset(
+    ip.strip().lower()
+    for ip in (os.getenv("TRUSTED_PROXY_FORWARDED_FOR") or "").split(",")
+    if ip.strip()
+)
+
 _store: dict[str, list[float]] = defaultdict(list)
 
 
 def _client_ip(request: Request) -> str:
-    """Prefer X-Forwarded-For first hop when behind proxy (e.g. Cloudflare Tunnel)."""
+    """Client IP for rate limit. Use X-Forwarded-For only when direct client is in TRUSTED_PROXY_FORWARDED_FOR."""
+    direct = (request.client.host if request.client else "").strip().lower()
+    if not direct:
+        return "unknown"
+    if not _TRUSTED_PROXY_IPS:
+        return direct
+    if direct not in _TRUSTED_PROXY_IPS:
+        return direct
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
         return forwarded.split(",")[0].strip()
-    if request.client:
-        return request.client.host
-    return "unknown"
+    return direct
 
 
 def _prune(ip: str) -> None:

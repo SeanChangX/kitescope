@@ -1,13 +1,12 @@
 import os
 import bcrypt
 from datetime import datetime, timedelta
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials, OAuth2PasswordRequestForm
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from fastapi import Request
 from database import get_db
 from models import AdminUser, User
 from user_activity import update_user_activity
@@ -18,7 +17,41 @@ _runtime_secret_key: str = ""
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 
-security = HTTPBearer(auto_error=False)
+# HttpOnly cookie names (XSS cannot read these)
+ADMIN_COOKIE = "kitescope_admin_token"
+USER_COOKIE = "kitescope_user_token"
+
+COOKIE_MAX_AGE = 60 * 24 * 60  # 24 hours in seconds
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "1").strip().lower() in ("1", "true", "yes")
+
+
+def cookie_params() -> dict:
+    """Common kwargs for set_cookie (HttpOnly, SameSite=Lax)."""
+    return {
+        "httponly": True,
+        "max_age": COOKIE_MAX_AGE,
+        "samesite": "lax",
+        "secure": COOKIE_SECURE,
+    "path": "/",
+}
+
+
+def _bearer_from_request(request: Request) -> str | None:
+    """Extract Bearer token from Authorization header."""
+    auth = request.headers.get("Authorization")
+    if not auth or not auth.startswith("Bearer "):
+        return None
+    return auth[7:].strip()
+
+
+def get_admin_token(request: Request) -> str | None:
+    """Token from HttpOnly cookie or Authorization header (cookie preferred for XSS safety)."""
+    return request.cookies.get(ADMIN_COOKIE) or _bearer_from_request(request)
+
+
+def get_user_token(request: Request) -> str | None:
+    """Token from HttpOnly cookie or Authorization header."""
+    return request.cookies.get(USER_COOKIE) or _bearer_from_request(request)
 
 
 def set_secret_key(key: str) -> None:
@@ -27,8 +60,11 @@ def set_secret_key(key: str) -> None:
 
 
 def get_secret_key() -> str:
-    """JWT signing key: env SECRET_KEY, or value set at startup (from DB / auto-generated)."""
-    return os.getenv("SECRET_KEY") or _runtime_secret_key or "change-me-dev"
+    """JWT signing key: env SECRET_KEY, or value set at startup (from DB / auto-generated). No weak fallback."""
+    key = os.getenv("SECRET_KEY") or _runtime_secret_key
+    if not (key and key.strip()):
+        raise RuntimeError("SECRET_KEY not set; ensure backend started after init_db and secret was set")
+    return key.strip()
 
 
 def hash_password(password: str) -> str:
@@ -61,13 +97,14 @@ def create_user_access_token(user_id: int, channel: str = "telegram") -> str:
 
 
 def get_notification_channel(
-    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    request: Request,
 ) -> str | None:
     """Return notification channel from user JWT ('line' or 'telegram'); None if no/invalid token."""
-    if not credentials or not credentials.credentials:
+    token = get_user_token(request)
+    if not token:
         return None
     try:
-        payload = jwt.decode(credentials.credentials, get_secret_key(), algorithms=[ALGORITHM])
+        payload = jwt.decode(token, get_secret_key(), algorithms=[ALGORITHM])
         if payload.get("type") != "user":
             return None
         ch = (payload.get("channel") or "").lower()
@@ -86,13 +123,14 @@ def get_notification_channel_required(
 
 
 async def get_current_admin(
-    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> AdminUser:
-    if not credentials or credentials.credentials is None:
+    token = get_admin_token(request)
+    if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
-        payload = jwt.decode(credentials.credentials, get_secret_key(), algorithms=[ALGORITHM])
+        payload = jwt.decode(token, get_secret_key(), algorithms=[ALGORITHM])
         username = payload.get("sub")
         if not username or payload.get("type") != "admin":
             raise HTTPException(status_code=401, detail="Invalid token")
@@ -112,14 +150,14 @@ async def require_first_run_setup(db: AsyncSession) -> bool:
 
 async def get_current_user_optional(
     request: Request,
-    credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: AsyncSession = Depends(get_db),
 ) -> User | None:
     """Return User if valid user JWT present; else None. Updates last_seen/last_ip when user present."""
-    if not credentials or not credentials.credentials:
+    token = get_user_token(request)
+    if not token:
         return None
     try:
-        payload = jwt.decode(credentials.credentials, get_secret_key(), algorithms=[ALGORITHM])
+        payload = jwt.decode(token, get_secret_key(), algorithms=[ALGORITHM])
         if payload.get("type") != "user":
             return None
         user_id = payload.get("sub")

@@ -8,7 +8,12 @@ from database import init_db, AsyncSessionLocal
 from routers import public, admin, auth, internal, user_notifications
 from notification_worker import start_worker
 from auth_admin import set_secret_key
-from secret_config import get_or_create_secret_key, ensure_internal_secret_file
+from secret_config import (
+    get_or_create_secret_key,
+    ensure_internal_secret_file,
+    get_internal_secret,
+    get_internal_secret_file_path,
+)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -22,8 +27,12 @@ async def lifespan(app: FastAPI):
         set_secret_key(effective)
     else:
         set_secret_key(effective)
-    # INTERNAL_SECRET: if unset and INTERNAL_SECRET_FILE set, create file with random secret so vision can read it
+    # INTERNAL_SECRET: if unset and INTERNAL_SECRET_FILE set, create file; fail startup if we still have no secret
     ensure_internal_secret_file()
+    if get_internal_secret_file_path() and not get_internal_secret():
+        raise RuntimeError(
+            "INTERNAL_SECRET_FILE is set but secret could not be read. Fix file path or set INTERNAL_SECRET."
+        )
     task = start_worker()
     yield
     if task is not None and not task.done():

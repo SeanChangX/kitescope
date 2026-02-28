@@ -1,29 +1,9 @@
-const ADMIN_TOKEN_KEY = "kitescope_admin_token";
-const USER_TOKEN_KEY = "kitescope_user_token";
+/**
+ * Auth: JWT in HttpOnly cookie (set by backend on login). Frontend uses credentials: "include"
+ * and does not read the token (XSS cannot steal it).
+ */
 
-export function getAdminToken(): string | null {
-  return localStorage.getItem(ADMIN_TOKEN_KEY);
-}
-
-export function setAdminToken(token: string): void {
-  localStorage.setItem(ADMIN_TOKEN_KEY, token);
-}
-
-export function clearAdminToken(): void {
-  localStorage.removeItem(ADMIN_TOKEN_KEY);
-}
-
-export function getUserToken(): string | null {
-  return localStorage.getItem(USER_TOKEN_KEY);
-}
-
-export function setUserToken(token: string): void {
-  localStorage.setItem(USER_TOKEN_KEY, token);
-}
-
-export function clearUserToken(): void {
-  localStorage.removeItem(USER_TOKEN_KEY);
-}
+const API = "/api";
 
 /** Dispatched when backend returns 401 so admin layout can show login again. */
 export const ADMIN_SESSION_EXPIRED_EVENT = "kitescope-admin-session-expired";
@@ -31,13 +11,37 @@ export const ADMIN_SESSION_EXPIRED_EVENT = "kitescope-admin-session-expired";
 /** Dispatched when backend returns 401 so dashboard can show logged-out state. */
 export const USER_SESSION_EXPIRED_EVENT = "kitescope-user-session-expired";
 
+export function getAdminToken(): string | null {
+  return null;
+}
+
+export function setAdminToken(_token: string): void {}
+
+export function clearAdminToken(): void {}
+
+export function getUserToken(): string | null {
+  return null;
+}
+
+export function setUserToken(_token: string): void {}
+
+export function clearUserToken(): void {}
+
+/** Call backend to clear admin cookie, then dispatch session expired. */
+export async function logoutAdmin(): Promise<void> {
+  await fetch(`${API}/auth/admin/logout`, { method: "POST", credentials: "include" });
+  window.dispatchEvent(new CustomEvent(ADMIN_SESSION_EXPIRED_EVENT));
+}
+
+/** Call backend to clear user cookie, then dispatch session expired. */
+export async function logoutUser(): Promise<void> {
+  await fetch(`${API}/auth/logout`, { method: "POST", credentials: "include" });
+  window.dispatchEvent(new CustomEvent(USER_SESSION_EXPIRED_EVENT));
+}
+
 export function authFetch(url: string, init?: RequestInit): Promise<Response> {
-  const token = getAdminToken();
-  const headers = new Headers(init?.headers);
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-  return fetch(url, { ...init, headers }).then((res) => {
+  return fetch(url, { ...init, credentials: "include" }).then((res) => {
     if (res.status === 401) {
-      clearAdminToken();
       window.dispatchEvent(new CustomEvent(ADMIN_SESSION_EXPIRED_EVENT));
     }
     return res;
@@ -45,12 +49,8 @@ export function authFetch(url: string, init?: RequestInit): Promise<Response> {
 }
 
 export function userFetch(url: string, init?: RequestInit): Promise<Response> {
-  const token = getUserToken();
-  const headers = new Headers(init?.headers);
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-  return fetch(url, { ...init, headers }).then((res) => {
+  return fetch(url, { ...init, credentials: "include" }).then((res) => {
     if (res.status === 401) {
-      clearUserToken();
       window.dispatchEvent(new CustomEvent(USER_SESSION_EXPIRED_EVENT));
     }
     return res;
