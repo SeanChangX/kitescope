@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from database import get_db
 from models import NotificationSubscription, User, Source
-from auth_admin import get_current_user
+from auth_admin import get_current_user, get_notification_channel_required
 
 router = APIRouter()
 
@@ -44,7 +44,6 @@ class CreateSubscriptionBody(BaseModel):
     source_id: int
     threshold: int = 5
     release_threshold: int | None = None
-    channel: str = "telegram"
     cooldown_minutes: int = 30
 
 
@@ -53,8 +52,9 @@ async def create_subscription(
     body: CreateSubscriptionBody,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
+    channel: str = Depends(get_notification_channel_required),
 ):
-    """Create a notification subscription for a source."""
+    """Create a notification subscription for a source. Channel is determined by login method (LINE or Telegram)."""
     result = await db.execute(select(Source).where(Source.id == body.source_id, Source.enabled == True))
     source = result.scalar_one_or_none()
     if not source:
@@ -67,9 +67,6 @@ async def create_subscription(
     )
     if existing.scalars().first():
         raise HTTPException(status_code=400, detail="Already subscribed to this source")
-    channel = (body.channel or "telegram").lower()
-    if channel not in ("line", "telegram"):
-        channel = "telegram"
     sub = NotificationSubscription(
         user_id=user.id,
         source_id=body.source_id,

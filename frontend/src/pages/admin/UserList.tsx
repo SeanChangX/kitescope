@@ -36,6 +36,12 @@ export default function UserList() {
     if (r.ok) load();
   }
 
+  async function unban(id: number) {
+    if (!confirm(t("admin.unbanUserConfirm"))) return;
+    const r = await authFetch(`/api/admin/users/${id}/unban`, { method: "POST" });
+    if (r.ok) load();
+  }
+
   async function remove(id: number) {
     if (!confirm(t("admin.deleteUserConfirm"))) return;
     const r = await authFetch(`/api/admin/users/${id}`, { method: "DELETE" });
@@ -50,47 +56,100 @@ export default function UserList() {
       {list.length === 0 ? (
         <p className="text-text-muted">{t("admin.noUsers")}</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-text-muted">
-                <th className="py-2 pr-2">{t("admin.userId")}</th>
-                <th className="py-2 pr-2">{t("admin.userName")}</th>
-                <th className="py-2 pr-2">{t("admin.userEmail")}</th>
-                <th className="py-2 pr-2">{t("admin.lastSeen")}</th>
-                <th className="py-2 pr-2">{t("admin.banned")}</th>
-                <th className="py-2">{t("admin.actions")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((u) => (
-                <tr key={u.id} className="border-b border-border-dark">
-                  <td className="py-2 pr-2 text-text-primary">{u.id}</td>
-                  <td className="py-2 pr-2 text-text-primary">{u.display_name || "-"}</td>
-                  <td className="py-2 pr-2 text-text-secondary">{u.email || "-"}</td>
-                  <td className="py-2 pr-2 text-text-secondary">{u.last_seen ? new Date(u.last_seen).toLocaleString() : "-"}</td>
-                  <td className="py-2 pr-2 text-text-secondary">{u.banned ? t("admin.yes") : t("admin.no")}</td>
-                  <td className="py-2 flex gap-2">
-                    {!u.banned && (
-                      <button
-                        onClick={() => ban(u.id)}
-                        className="ks-btn rounded bg-ks-warning/20 px-2 py-1 text-ks-warning hover:bg-ks-warning hover:text-bg-primary"
-                      >
-                        {t("admin.ban")}
-                      </button>
-                    )}
-                    <button
-                      onClick={() => remove(u.id)}
-                      className="ks-btn rounded bg-ks-danger/20 px-2 py-1 text-ks-danger hover:bg-ks-danger hover:text-white"
-                    >
-                      {t("admin.delete")}
-                    </button>
-                  </td>
+        <>
+          <div className="hidden overflow-x-auto md:block">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-text-muted">
+                  <th className="py-2 pr-2">{t("admin.userId")}</th>
+                  <th className="py-2 pr-2">{t("admin.userName")}</th>
+                  <th className="py-2 pr-2">{t("admin.userEmail")}</th>
+                  <th className="py-2 pr-2">{t("admin.lastSeen")}</th>
+                  <th className="py-2 pr-2">{t("admin.banned")}</th>
+                  <th className="py-2">{t("admin.actions")}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {list.map((u) => (
+                  <tr key={u.id} className="border-b border-border-dark">
+                    <td className="py-2 pr-2 text-text-primary">{u.id}</td>
+                    <td className="py-2 pr-2 text-text-primary">{u.display_name || "-"}</td>
+                    <td className="py-2 pr-2 text-text-secondary">{u.email || "-"}</td>
+                    <td className="py-2 pr-2 text-text-secondary">{u.last_seen ? new Date(u.last_seen).toLocaleString() : "-"}</td>
+                    <td className="py-2 pr-2 text-text-secondary">{u.banned ? t("admin.yes") : t("admin.no")}</td>
+                    <td className="py-2 flex gap-2">
+                      {!u.banned ? (
+                        <button
+                          onClick={() => ban(u.id)}
+                          className="ks-btn rounded bg-ks-warning/20 px-2 py-1 text-ks-warning hover:bg-ks-warning hover:text-bg-primary"
+                        >
+                          {t("admin.ban")}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => unban(u.id)}
+                          className="ks-btn rounded bg-ks-success/20 px-2 py-1 text-ks-success hover:bg-ks-success hover:text-bg-primary"
+                        >
+                          {t("admin.unban")}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => remove(u.id)}
+                        className="ks-btn rounded bg-ks-danger/20 px-2 py-1 text-ks-danger hover:bg-ks-danger hover:text-white"
+                      >
+                        {t("admin.delete")}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="space-y-3 md:hidden">
+            {list.map((u) => (
+              <div
+                key={u.id}
+                className="rounded border border-border-dark p-3 text-sm"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium text-text-primary">{u.display_name || "-"}</span>
+                  <span className="text-text-muted">ID {u.id}</span>
+                </div>
+                <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-text-secondary">
+                  <dt>{t("admin.userEmail")}</dt>
+                  <dd>{u.email || "-"}</dd>
+                  <dt>{t("admin.lastSeen")}</dt>
+                  <dd>{u.last_seen ? new Date(u.last_seen).toLocaleString() : "-"}</dd>
+                  <dt>{t("admin.banned")}</dt>
+                  <dd>{u.banned ? t("admin.yes") : t("admin.no")}</dd>
+                </dl>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {!u.banned ? (
+                    <button
+                      onClick={() => ban(u.id)}
+                      className="ks-btn rounded bg-ks-warning/20 px-2 py-1 text-sm text-ks-warning hover:bg-ks-warning hover:text-bg-primary"
+                    >
+                      {t("admin.ban")}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => unban(u.id)}
+                      className="ks-btn rounded bg-ks-success/20 px-2 py-1 text-sm text-ks-success hover:bg-ks-success hover:text-bg-primary"
+                    >
+                      {t("admin.unban")}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => remove(u.id)}
+                    className="ks-btn rounded bg-ks-danger/20 px-2 py-1 text-sm text-ks-danger hover:bg-ks-danger hover:text-white"
+                  >
+                    {t("admin.delete")}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

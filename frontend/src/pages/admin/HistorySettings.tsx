@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { authFetch } from "../../lib/auth";
+import { useI18n } from "../../lib/i18n";
 
 export default function HistorySettings() {
+  const { t } = useI18n();
   const [retentionDays, setRetentionDays] = useState(30);
   const [defaultInterval, setDefaultInterval] = useState<"minute" | "hour" | "day">("hour");
   const [loading, setLoading] = useState(true);
@@ -29,18 +31,18 @@ export default function HistorySettings() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ retention_days: retentionDays, default_interval: defaultInterval }),
     });
-    if (r.ok) setMessage("Saved.");
-    else setMessage("Failed to save.");
+    if (r.ok) setMessage(t("admin.saved"));
+    else setMessage(t("admin.saveFailed"));
   }
 
-  if (loading) return <p className="text-text-muted">Loading...</p>;
+  if (loading) return <p className="text-text-muted">{t("common.loading")}</p>;
 
   return (
     <div className="ks-card">
-      <h3 className="font-gaming mb-3 font-medium text-text-primary">History settings</h3>
+      <h3 className="font-gaming mb-3 font-medium text-text-primary">{t("admin.historySettings")}</h3>
       <form onSubmit={submit} className="space-y-3 max-w-sm">
         <div>
-          <label className="block text-sm text-text-muted mb-1">Retention (days)</label>
+          <label className="block text-sm text-text-muted mb-1">{t("admin.retentionDays")}</label>
           <input
             type="number"
             min={1}
@@ -51,20 +53,20 @@ export default function HistorySettings() {
           />
         </div>
         <div>
-          <label className="block text-sm text-text-muted mb-1">Default interval (guest history)</label>
+          <label className="block text-sm text-text-muted mb-1">{t("admin.defaultIntervalGuestHistory")}</label>
           <select
             value={defaultInterval}
             onChange={(e) => setDefaultInterval(e.target.value as "minute" | "hour" | "day")}
             className="ks-input"
           >
-            <option value="minute">Minute</option>
-            <option value="hour">Hour</option>
-            <option value="day">Day</option>
+            <option value="minute">{t("admin.intervalMinute")}</option>
+            <option value="hour">{t("admin.intervalHour")}</option>
+            <option value="day">{t("admin.intervalDay")}</option>
           </select>
         </div>
         {message && <p className="text-sm text-text-secondary">{message}</p>}
         <button type="submit" className="ks-btn ks-btn-primary">
-          Save
+          {t("admin.save")}
         </button>
       </form>
     </div>

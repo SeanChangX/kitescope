@@ -244,6 +244,22 @@ async def ban_user(
     return {"message": "User banned"}
 
 
+@router.post("/users/{user_id}/unban")
+async def unban_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(_admin_only),
+):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.banned = False
+    db.add(user)
+    await db.flush()
+    return {"message": "User unbanned"}
+
+
 @router.delete("/users/{user_id}")
 async def delete_user(
     user_id: int,

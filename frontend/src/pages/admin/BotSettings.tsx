@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { authFetch } from "../../lib/auth";
 import { useI18n } from "../../lib/i18n";
 
+const MASK = "••••••••••••••";
+
 type BotState = {
   line: {
     channel_id: string;
@@ -64,11 +66,11 @@ export default function BotSettings() {
     setMessage(null);
     setSaving(true);
     const body: Record<string, string> = { line_channel_id: form.line_channel_id };
-    if (form.line_channel_secret) body.line_channel_secret = form.line_channel_secret;
-    if (form.line_channel_access_token) body.line_channel_access_token = form.line_channel_access_token;
+    if (form.line_channel_secret && form.line_channel_secret !== MASK) body.line_channel_secret = form.line_channel_secret;
+    if (form.line_channel_access_token && form.line_channel_access_token !== MASK) body.line_channel_access_token = form.line_channel_access_token;
     if (form.line_login_channel_id !== undefined) body.line_login_channel_id = form.line_login_channel_id;
-    if (form.line_login_channel_secret) body.line_login_channel_secret = form.line_login_channel_secret;
-    if (form.telegram_bot_token) body.telegram_bot_token = form.telegram_bot_token;
+    if (form.line_login_channel_secret && form.line_login_channel_secret !== MASK) body.line_login_channel_secret = form.line_login_channel_secret;
+    if (form.telegram_bot_token && form.telegram_bot_token !== MASK) body.telegram_bot_token = form.telegram_bot_token;
     const r = await authFetch("/api/admin/settings/bots", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -94,6 +96,7 @@ export default function BotSettings() {
         <div>
           <h4 className="text-sm font-medium text-text-secondary mb-2">{t("admin.line")}</h4>
           <div className="space-y-2">
+            <p className="text-xs font-medium text-text-muted mt-2 first:mt-0">{t("admin.lineMessagingApi")}</p>
             <input
               type="text"
               placeholder={t("admin.channelId")}
@@ -104,18 +107,18 @@ export default function BotSettings() {
             <input
               type="password"
               placeholder={t("admin.channelSecretPlaceholder")}
-              value={form.line_channel_secret}
-              onChange={(e) => setForm((f) => ({ ...f, line_channel_secret: e.target.value }))}
+              value={form.line_channel_secret || (data?.line?.configured ? MASK : "")}
+              onChange={(e) => setForm((f) => ({ ...f, line_channel_secret: e.target.value === MASK ? "" : e.target.value }))}
               className="ks-input"
             />
             <input
               type="password"
               placeholder={t("admin.channelAccessTokenPlaceholder")}
-              value={form.line_channel_access_token}
-              onChange={(e) => setForm((f) => ({ ...f, line_channel_access_token: e.target.value }))}
+              value={form.line_channel_access_token || (data?.line?.configured ? MASK : "")}
+              onChange={(e) => setForm((f) => ({ ...f, line_channel_access_token: e.target.value === MASK ? "" : e.target.value }))}
               className="ks-input"
             />
-            <p className="text-xs text-text-muted mt-1">{t("admin.lineLoginChannelHint")}</p>
+            <p className="text-xs font-medium text-text-muted mt-2">{t("admin.lineLoginSection")}</p>
             <input
               type="text"
               placeholder={t("admin.lineLoginChannelIdPlaceholder")}
@@ -126,8 +129,8 @@ export default function BotSettings() {
             <input
               type="password"
               placeholder={t("admin.lineLoginChannelSecretPlaceholder")}
-              value={form.line_login_channel_secret}
-              onChange={(e) => setForm((f) => ({ ...f, line_login_channel_secret: e.target.value }))}
+              value={form.line_login_channel_secret || (data?.line?.login_channel_id ? MASK : "")}
+              onChange={(e) => setForm((f) => ({ ...f, line_login_channel_secret: e.target.value === MASK ? "" : e.target.value }))}
               className="ks-input"
             />
             {data?.line?.configured && (
@@ -140,8 +143,8 @@ export default function BotSettings() {
           <input
             type="password"
             placeholder={t("admin.telegramBotTokenPlaceholder")}
-            value={form.telegram_bot_token}
-            onChange={(e) => setForm((f) => ({ ...f, telegram_bot_token: e.target.value }))}
+            value={form.telegram_bot_token || (data?.telegram?.configured ? MASK : "")}
+            onChange={(e) => setForm((f) => ({ ...f, telegram_bot_token: e.target.value === MASK ? "" : e.target.value }))}
             className="ks-input"
           />
           {data?.telegram?.configured && (

@@ -41,10 +41,36 @@ def create_access_token(subject: str) -> str:
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def create_user_access_token(user_id: int) -> str:
+def create_user_access_token(user_id: int, channel: str = "telegram") -> str:
+    """Create JWT for end-user. channel is the login method: 'line' or 'telegram', used for notification subscription."""
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode = {"sub": str(user_id), "exp": expire, "type": "user"}
+    to_encode = {"sub": str(user_id), "exp": expire, "type": "user", "channel": channel}
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def get_notification_channel(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+) -> str | None:
+    """Return notification channel from user JWT ('line' or 'telegram'); None if no/invalid token."""
+    if not credentials or not credentials.credentials:
+        return None
+    try:
+        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") != "user":
+            return None
+        ch = (payload.get("channel") or "").lower()
+        return ch if ch in ("line", "telegram") else None
+    except (JWTError, ValueError):
+        return None
+
+
+def get_notification_channel_required(
+    channel: str | None = Depends(get_notification_channel),
+) -> str:
+    """Return notification channel from JWT; 401 if missing (e.g. old token without channel)."""
+    if channel:
+        return channel
+    raise HTTPException(status_code=401, detail="Re-login required to set notification channel")
 
 
 async def get_current_admin(

@@ -18,6 +18,7 @@ from auth_admin import (
     require_first_run_setup,
     get_current_admin,
     get_current_user_optional,
+    get_notification_channel,
 )
 
 router = APIRouter()
@@ -57,7 +58,7 @@ async def line_login_url(
         "client_id": channel_id,
         "redirect_uri": redirect_uri,
         "state": state or "line",
-        "scope": "profile openid",
+        "scope": "profile openid email",
     }
     url = LINE_AUTH_URL + "?" + urllib.parse.urlencode(params)
     return {"url": url}
@@ -108,6 +109,7 @@ async def line_callback(
     line_id = profile.get("userId") or profile.get("sub")
     display_name = (profile.get("displayName") or "").strip() or None
     picture_url = (profile.get("pictureUrl") or "").strip() or None
+    email = (profile.get("email") or "").strip() or None
     if not line_id:
         raise HTTPException(status_code=400, detail="No LINE user ID")
     result = await db.execute(select(User).where(User.line_id == line_id))
@@ -117,15 +119,17 @@ async def line_callback(
             user.display_name = display_name
         if picture_url:
             user.avatar = picture_url
+        if email is not None:
+            user.email = email or ""
         db.add(user)
     else:
-        user = User(line_id=line_id, display_name=display_name or "", avatar=picture_url or "")
+        user = User(line_id=line_id, display_name=display_name or "", avatar=picture_url or "", email=email or "")
         db.add(user)
     await db.flush()
     await db.refresh(user)
     if user.banned:
         raise HTTPException(status_code=403, detail="Account is banned")
-    token = create_user_access_token(user.id)
+    token = create_user_access_token(user.id, "line")
     return {"access_token": token, "token_type": "bearer", "user_id": user.id}
 
 
@@ -205,21 +209,31 @@ async def telegram_verify(
     await db.refresh(user)
     if user.banned:
         raise HTTPException(status_code=403, detail="Account is banned")
-    token = create_user_access_token(user.id)
+    token = create_user_access_token(user.id, "telegram")
     return {"access_token": token, "token_type": "bearer", "user_id": user.id}
 
 
 @router.get("/me")
-async def auth_me(user: User | None = Depends(get_current_user_optional)):
+async def auth_me(
+    user: User | None = Depends(get_current_user_optional),
+    channel: str | None = Depends(get_notification_channel),
+):
     """Return current user info if logged in with user token; else 401."""
     if user is None:
         raise HTTPException(status_code=401, detail="Not logged in")
+    notification_channel = channel
+    if not notification_channel:
+        if user.line_id and not user.telegram_id:
+            notification_channel = "line"
+        elif user.telegram_id:
+            notification_channel = "telegram"
     return {
         "user_id": user.id,
         "display_name": user.display_name or "",
         "avatar": user.avatar or "",
         "line_id": user.line_id is not None,
         "telegram_id": user.telegram_id is not None,
+        "notification_channel": notification_channel,
     }
 
 

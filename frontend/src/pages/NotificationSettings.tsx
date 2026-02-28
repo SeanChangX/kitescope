@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { userFetch } from "../lib/auth";
 import { useI18n } from "../lib/i18n";
+import AppHeader from "../components/AppHeader";
 
 const API = "/api";
 
@@ -18,6 +19,18 @@ type Sub = {
   last_notified_at: string | null;
 };
 
+function formatSubDesc(
+  sub: Sub,
+  t: (key: string) => string
+): string {
+  const channelLabel =
+    sub.channel === "line" ? t("notifications.channelLine") : t("notifications.channelTelegram");
+  return t("notifications.notifyWhenKites")
+    .replace("{threshold}", String(sub.threshold))
+    .replace("{minutes}", String(sub.cooldown_minutes))
+    .replace("{channel}", channelLabel);
+}
+
 export default function NotificationSettings() {
   const { t } = useI18n();
   const [subs, setSubs] = useState<Sub[]>([]);
@@ -26,7 +39,6 @@ export default function NotificationSettings() {
   const [unauth, setUnauth] = useState(false);
   const [newSourceId, setNewSourceId] = useState<number | "">("");
   const [newThreshold, setNewThreshold] = useState(5);
-  const [newChannel, setNewChannel] = useState<"telegram" | "line">("telegram");
   const [newCooldown, setNewCooldown] = useState(30);
   const [adding, setAdding] = useState(false);
   const [message, setMessage] = useState("");
@@ -65,7 +77,6 @@ export default function NotificationSettings() {
       body: JSON.stringify({
         source_id: newSourceId,
         threshold: newThreshold,
-        channel: newChannel,
         cooldown_minutes: newCooldown,
       }),
     });
@@ -74,9 +85,9 @@ export default function NotificationSettings() {
     if (r.ok) {
       load();
       setNewSourceId("");
-      setMessage("Subscribed.");
+      setMessage(t("notifications.subscribed"));
     } else {
-      setMessage((data.detail as string) || "Failed.");
+      setMessage((data.detail as string) || t("notifications.failed"));
     }
   }
 
@@ -90,7 +101,7 @@ export default function NotificationSettings() {
   }
 
   async function remove(subId: number) {
-    if (!confirm("Remove this subscription?")) return;
+    if (!confirm(t("notifications.removeSubscriptionConfirm"))) return;
     const r = await userFetch(`${API}/notifications/subscriptions/${subId}`, { method: "DELETE" });
     if (r.ok) load();
   }
@@ -98,56 +109,52 @@ export default function NotificationSettings() {
   if (unauth) {
     return (
       <div className="min-h-screen bg-bg-primary px-4 py-12">
+        <AppHeader />
         <div className="mx-auto max-w-2xl ks-card">
-          <p className="text-text-secondary">Login required to manage notifications.</p>
+          <p className="text-text-secondary">{t("notifications.loginRequired")}</p>
           <Link to="/login" className="mt-2 inline-block text-primary hover:underline">
-            Sign in
+            {t("notifications.signIn")}
           </Link>
           <Link to="/" className="ml-4 inline-block text-text-muted hover:text-primary">
-            Back to home
+            {t("notifications.backToHome")}
           </Link>
         </div>
       </div>
     );
   }
 
-  if (loading) return <p className="min-h-screen bg-bg-primary p-8 text-text-muted">{t("common.loading")}</p>;
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-bg-primary">
+        <AppHeader />
+        <p className="p-8 text-text-muted">{t("common.loading")}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-bg-primary">
-      <header className="border-b border-border-dark bg-bg-secondary shadow-lg">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
-          <Link to="/" className="font-gaming text-xl font-semibold text-text-primary">
-            {t("app.name")}
-          </Link>
-          <nav className="flex gap-4">
-            <Link to="/" className="text-sm text-text-secondary hover:text-primary">
-              Home
-            </Link>
-            <Link to="/login" className="text-sm text-text-secondary hover:text-primary">
-              {t("nav.login")}
-            </Link>
-          </nav>
-        </div>
-      </header>
-      <main className="mx-auto max-w-2xl px-4 py-8">
-        <h1 className="font-gaming mb-6 text-2xl font-bold text-text-primary">{t("notifications.title")}</h1>
-        <p className="mb-6 text-sm text-text-secondary">
-          Get notified when kite count reaches your threshold for a stream. Set channel (LINE or Telegram) and cooldown.
-        </p>
+      <AppHeader />
+      <main className="mx-auto max-w-2xl px-4 py-8 sm:max-w-7xl sm:px-6">
+        <h1 className="font-gaming mb-6 text-2xl font-bold text-text-primary sm:text-3xl">
+          {t("notifications.title")}
+        </h1>
+        <p className="mb-6 text-sm text-text-secondary">{t("notifications.description")}</p>
 
         <form onSubmit={addSub} className="ks-card mb-8">
-          <h2 className="font-gaming mb-3 font-medium text-text-primary">Add subscription</h2>
+          <h2 className="font-gaming mb-3 font-medium text-text-primary">
+            {t("notifications.addSubscription")}
+          </h2>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="block text-xs text-text-muted">Stream</label>
+              <label className="block text-xs text-text-muted">{t("notifications.stream")}</label>
               <select
                 value={newSourceId}
                 onChange={(e) => setNewSourceId(e.target.value === "" ? "" : Number(e.target.value))}
                 className="ks-input mt-1"
                 required
               >
-                <option value="">Select stream</option>
+                <option value="">{t("notifications.selectStream")}</option>
                 {sources.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name || s.location || `Source ${s.id}`}
@@ -156,7 +163,9 @@ export default function NotificationSettings() {
               </select>
             </div>
             <div>
-              <label className="block text-xs text-text-muted">Notify when count &gt;=</label>
+              <label className="block text-xs text-text-muted">
+                {t("notifications.notifyWhenCount")}
+              </label>
               <input
                 type="number"
                 min={1}
@@ -166,19 +175,10 @@ export default function NotificationSettings() {
                 className="ks-input mt-1"
               />
             </div>
-            <div>
-              <label className="block text-xs text-text-muted">Channel</label>
-              <select
-                value={newChannel}
-                onChange={(e) => setNewChannel(e.target.value as "telegram" | "line")}
-                className="ks-input mt-1"
-              >
-                <option value="telegram">Telegram</option>
-                <option value="line">LINE</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-text-muted">Cooldown (minutes)</label>
+            <div className="sm:col-span-2">
+              <label className="block text-xs text-text-muted">
+                {t("notifications.cooldownMinutes")}
+              </label>
               <input
                 type="number"
                 min={1}
@@ -187,6 +187,7 @@ export default function NotificationSettings() {
                 onChange={(e) => setNewCooldown(Number(e.target.value) || 30)}
                 className="ks-input mt-1"
               />
+              <p className="mt-1 text-xs text-text-muted">{t("notifications.cooldownHint")}</p>
             </div>
           </div>
           {message && <p className="mt-2 text-sm text-text-secondary">{message}</p>}
@@ -195,38 +196,47 @@ export default function NotificationSettings() {
             disabled={adding || newSourceId === ""}
             className="ks-btn ks-btn-primary mt-3 disabled:opacity-50"
           >
-            {adding ? "Adding..." : "Add"}
+            {adding ? t("notifications.adding") : t("notifications.add")}
           </button>
         </form>
 
         <div className="ks-card p-0 overflow-hidden">
-          <h2 className="font-gaming border-b border-border-dark p-3 font-medium text-text-primary">Your subscriptions</h2>
+          <h2 className="font-gaming border-b border-border-dark p-3 font-medium text-text-primary">
+            {t("notifications.yourSubscriptions")}
+          </h2>
           {subs.length === 0 ? (
-            <p className="p-4 text-text-muted">No subscriptions yet. Add one above.</p>
+            <p className="p-4 text-text-muted">{t("notifications.noSubscriptionsYet")}</p>
           ) : (
             <ul className="divide-y divide-border-dark">
               {subs.map((sub) => (
-                <li key={sub.id} className="flex flex-wrap items-center justify-between gap-2 p-3">
-                  <div>
+                <li
+                  key={sub.id}
+                  className="flex flex-col gap-3 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0">
                     <span className="font-medium text-text-primary">{sub.source_name}</span>
                     <span className="ml-2 text-sm text-text-muted">
-                      Notify when &gt;= {sub.threshold} kites, cooldown {sub.cooldown_minutes} min, {sub.channel}
+                      {formatSubDesc(sub, t)}
                     </span>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex w-full gap-2 sm:w-auto sm:flex-1 sm:min-w-0 sm:max-w-xs">
                     <button
                       type="button"
                       onClick={() => toggleEnabled(sub)}
-                      className={`ks-btn text-sm ${sub.enabled ? "bg-bg-tertiary text-text-primary" : "bg-ks-success/20 text-ks-success"}`}
+                      className={`ks-btn flex-1 min-w-0 py-1.5 text-sm sm:flex-none ${
+                        sub.enabled
+                          ? "ks-btn-secondary"
+                          : "bg-ks-success/20 text-ks-success hover:bg-ks-success/30 hover:text-white"
+                      }`}
                     >
-                      {sub.enabled ? "On" : "Off"}
+                      {sub.enabled ? t("notifications.on") : t("notifications.off")}
                     </button>
                     <button
                       type="button"
                       onClick={() => remove(sub.id)}
-                      className="ks-btn rounded bg-ks-danger/20 px-2 py-1 text-sm text-ks-danger hover:bg-ks-danger hover:text-white"
+                      className="ks-btn flex-1 min-w-0 py-1.5 text-sm rounded-lg bg-ks-danger/20 text-ks-danger hover:bg-ks-danger hover:text-white sm:flex-none"
                     >
-                      Remove
+                      {t("notifications.remove")}
                     </button>
                   </div>
                 </li>
