@@ -1,4 +1,6 @@
+import os
 from contextlib import asynccontextmanager
+from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -22,13 +24,43 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Security headers (X-Frame-Options, X-Content-Type-Options, etc.)
+_USE_HSTS = os.getenv("SECURITY_HEADERS_HSTS", "").strip().lower() in ("1", "true", "yes")
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        if _USE_HSTS:
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
+
+# CORS: set CORS_ORIGINS (comma-separated) or PUBLIC_APP_URL for a single origin (e.g. Cloudflare Tunnel URL).
+# Unset => allow_origins=["*"] for backward compatibility.
+_cors_origins_raw = os.getenv("CORS_ORIGINS") or os.getenv("PUBLIC_APP_URL") or ""
+_cors_origins = [s.strip().rstrip("/") for s in _cors_origins_raw.split(",") if s.strip()]
+if _cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 app.include_router(public.router, prefix="/api", tags=["public"])
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])

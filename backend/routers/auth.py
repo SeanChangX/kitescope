@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import os
+from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,12 +23,60 @@ from auth_admin import (
     get_current_user_optional,
     get_notification_channel,
 )
+from rate_limit import rate_limit_admin_auth
 
 router = APIRouter()
 
 LINE_AUTH_URL = "https://access.line.me/oauth2/v2.1/authorize"
 LINE_TOKEN_URL = "https://api.line.me/oauth2/v2.1/token"
 LINE_PROFILE_URL = "https://api.line.me/v2/profile"
+
+def _origin_from_url(url: str) -> str | None:
+    """Return origin (scheme + lowercase host) from a URL, or None."""
+    try:
+        p = urlparse(url.strip())
+        if not p.scheme or not p.netloc:
+            return None
+        host = p.netloc.split(":")[0].lower()
+        return f"{p.scheme.lower()}://{host}"
+    except Exception:
+        return None
+
+
+def _redirect_uri_origin(redirect_uri: str) -> str | None:
+    """Return origin (scheme + lowercase host) of redirect_uri, or None if invalid."""
+    return _origin_from_url(redirect_uri)
+
+
+def _allowed_line_redirect_origins(by_key: dict) -> set[str]:
+    """Set of allowed origins for LINE redirect_uri: env + DB public_app_url."""
+    raw = (os.getenv("LINE_REDIRECT_ALLOW_ORIGINS") or os.getenv("PUBLIC_APP_URL") or "").strip()
+    allowed = set()
+    for s in raw.split(","):
+        s = s.strip().rstrip("/")
+        if s:
+            o = _origin_from_url(s)
+            if o:
+                allowed.add(o)
+    app_url = (by_key.get("public_app_url") or "").strip().rstrip("/")
+    if app_url:
+        o = _origin_from_url(app_url)
+        if o:
+            allowed.add(o)
+    return allowed
+
+
+def _validate_line_redirect_uri(redirect_uri: str, by_key: dict) -> None:
+    """Raise HTTP 400 if redirect_uri origin is not in allowlist."""
+    allowed = _allowed_line_redirect_origins(by_key)
+    if not allowed:
+        raise HTTPException(
+            status_code=400,
+            detail="LINE redirect_uri allowlist not configured. Set PUBLIC_APP_URL or LINE_REDIRECT_ALLOW_ORIGINS.",
+        )
+    origin = _redirect_uri_origin(redirect_uri)
+    if not origin or origin not in allowed:
+        raise HTTPException(status_code=400, detail="redirect_uri origin not allowed")
 
 
 def _line_login_credentials(by_key: dict) -> tuple[str, str]:
@@ -48,12 +97,14 @@ async def line_login_url(
     """Return LINE authorization URL. redirect_uri must be the frontend callback (e.g. /auth/callback)."""
     result = await db.execute(select(BotConfig).where(BotConfig.key.in_([
         "line_channel_id", "line_channel_secret", "line_login_channel_id", "line_login_channel_secret",
+        "public_app_url",
     ])))
     rows = result.scalars().all()
     by_key = {r.key: r.value for r in rows}
     channel_id, _ = _line_login_credentials(by_key)
     if not channel_id or not redirect_uri:
         raise HTTPException(status_code=400, detail="LINE not configured or redirect_uri required")
+    _validate_line_redirect_uri(redirect_uri, by_key)
     import urllib.parse
     params = {
         "response_type": "code",
@@ -80,12 +131,14 @@ async def line_callback(
     """Exchange code for token, get profile, create/update User, return user JWT."""
     result = await db.execute(select(BotConfig).where(BotConfig.key.in_([
         "line_channel_id", "line_channel_secret", "line_login_channel_id", "line_login_channel_secret",
+        "public_app_url",
     ])))
     rows = result.scalars().all()
     by_key = {r.key: r.value for r in rows}
     channel_id, channel_secret = _line_login_credentials(by_key)
     if not channel_id or not channel_secret or not body.code or not body.redirect_uri:
         raise HTTPException(status_code=400, detail="Invalid request or LINE not configured")
+    _validate_line_redirect_uri(body.redirect_uri, by_key)
     async with httpx.AsyncClient(timeout=10.0) as client:
         token_r = await client.post(
             LINE_TOKEN_URL,
@@ -266,7 +319,11 @@ class AdminSetupBody(BaseModel):
 
 
 @router.post("/admin/setup")
-async def admin_setup(body: AdminSetupBody, db: AsyncSession = Depends(get_db)):
+async def admin_setup(
+    body: AdminSetupBody,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(rate_limit_admin_auth),
+):
     """First-run only: create the first admin account."""
     if not await require_first_run_setup(db):
         raise HTTPException(status_code=400, detail="Admin already exists")
@@ -285,7 +342,11 @@ async def admin_setup(body: AdminSetupBody, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/admin/login")
-async def admin_login(form: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
+async def admin_login(
+    form: OAuth2PasswordRequestForm = Depends(),
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(rate_limit_admin_auth),
+):
     if await require_first_run_setup(db):
         raise HTTPException(status_code=400, detail="Setup required first. Call GET /api/auth/admin/setup-status")
     result = await db.execute(select(AdminUser).where(AdminUser.username == form.username))
