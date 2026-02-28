@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import SuggestForm from "./SuggestForm";
 import SourceCard from "../components/SourceCard";
 import AppHeader from "../components/AppHeader";
-import { userFetch } from "../lib/auth";
 import { useI18n } from "../lib/i18n";
 
 const API = "/api";
@@ -135,7 +133,7 @@ export default function GuestView() {
           <p className="text-sm text-text-muted mb-6 max-w-xl">
             {t("home.suggestDesc")}
           </p>
-          <SuggestForm onSuccess={refreshSources} hasUser={!!user} />
+          <SuggestForm onSuccess={refreshSources} />
         </section>
       </main>
     </div>
