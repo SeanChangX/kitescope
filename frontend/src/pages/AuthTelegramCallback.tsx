@@ -1,39 +1,31 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { setUserToken } from "../lib/auth";
 
 const API = "/api";
 
-function parseHashFragment(hash: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  if (!hash || hash[0] !== "#") return out;
-  const params = new URLSearchParams(hash.slice(1));
-  params.forEach((v, k) => {
-    out[k] = v;
-  });
-  return out;
-}
-
 export default function AuthTelegramCallback() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [status, setStatus] = useState<"loading" | "ok" | "error">("loading");
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const params = parseHashFragment(window.location.hash);
-    const hash = params.hash;
-    if (!hash || !params.id) {
+    // Telegram redirects to auth_url with params in query string (?id=...&hash=...)
+    const hash = searchParams.get("hash");
+    const id = searchParams.get("id");
+    if (!hash || !id) {
       setStatus("error");
       setError("Invalid Telegram callback data.");
       return;
     }
     const body = {
-      id: parseInt(params.id, 10),
-      first_name: params.first_name || "",
-      last_name: params.last_name || "",
-      username: params.username || "",
-      photo_url: params.photo_url || "",
-      auth_date: parseInt(params.auth_date || "0", 10),
+      id: parseInt(id, 10),
+      first_name: searchParams.get("first_name") || "",
+      last_name: searchParams.get("last_name") || "",
+      username: searchParams.get("username") || "",
+      photo_url: searchParams.get("photo_url") || "",
+      auth_date: parseInt(searchParams.get("auth_date") || "0", 10),
       hash,
     };
     if (isNaN(body.id)) {
@@ -61,7 +53,7 @@ export default function AuthTelegramCallback() {
         setStatus("error");
         setError("Network error.");
       });
-  }, [navigate]);
+  }, [navigate, searchParams]);
 
   if (status === "loading") {
     return (

@@ -12,17 +12,20 @@ export default function LoginPage() {
 
   useEffect(() => {
     const redirectUri = `${window.location.origin}/auth/callback`;
-    fetch(`${API}/auth/line/login-url?redirect_uri=${encodeURIComponent(redirectUri)}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.url) setLineUrl(d.url);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-    fetch(`${API}/auth/telegram/bot-username`)
-      .then((r) => r.json())
-      .then((d) => setTelegramBot((d.bot_username as string) || ""))
-      .catch(() => {});
+    Promise.all([
+      fetch(`${API}/auth/line/login-url?redirect_uri=${encodeURIComponent(redirectUri)}`)
+        .then((r) => r.json())
+        .then((d) => (d.url ? d.url : ""))
+        .catch(() => ""),
+      fetch(`${API}/auth/telegram/bot-username`)
+        .then((r) => r.json())
+        .then((d) => (d.bot_username as string) || "")
+        .catch(() => ""),
+    ]).then(([url, bot]) => {
+      setLineUrl(url);
+      setTelegramBot(bot);
+      setLoading(false);
+    });
   }, []);
 
   useEffect(() => {
@@ -32,6 +35,8 @@ export default function LoginPage() {
     script.setAttribute("data-telegram-login", telegramBot);
     script.setAttribute("data-auth-url", `${window.location.origin}/auth/telegram-callback`);
     script.setAttribute("data-request-access", "write");
+    script.setAttribute("data-size", "large");
+    script.setAttribute("data-radius", "8");
     script.async = true;
     const wrap = document.getElementById("telegram-widget-wrap");
     if (wrap) {
@@ -64,7 +69,10 @@ export default function LoginPage() {
             <p className="text-sm text-text-muted">{t("login.lineUnavailable")}</p>
           )}
           {telegramBot ? (
-            <div id="telegram-widget-wrap" className="flex justify-center" />
+            <div
+              id="telegram-widget-wrap"
+              className="flex min-h-[42px] w-full items-center justify-center"
+            />
           ) : (
             <p className="text-sm text-text-muted">{t("login.telegramUnavailable")}</p>
           )}

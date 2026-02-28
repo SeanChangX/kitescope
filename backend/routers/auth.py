@@ -1,5 +1,7 @@
+import base64
 import hashlib
 import hmac
+import json
 import os
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
@@ -106,10 +108,21 @@ async def line_callback(
         if profile_r.status_code != 200:
             raise HTTPException(status_code=400, detail="LINE profile failed")
         profile = profile_r.json()
+        id_token = token_data.get("id_token")
+        email_from_id_token = None
+        if id_token:
+            try:
+                payload_b64 = id_token.split(".")[1]
+                payload_b64 += "==" * (4 - len(payload_b64) % 4)
+                payload_json = base64.urlsafe_b64decode(payload_b64)
+                id_claims = json.loads(payload_json)
+                email_from_id_token = (id_claims.get("email") or "").strip() or None
+            except (IndexError, ValueError, KeyError):
+                pass
     line_id = profile.get("userId") or profile.get("sub")
     display_name = (profile.get("displayName") or "").strip() or None
     picture_url = (profile.get("pictureUrl") or "").strip() or None
-    email = (profile.get("email") or "").strip() or None
+    email = email_from_id_token or (profile.get("email") or "").strip() or None
     if not line_id:
         raise HTTPException(status_code=400, detail="No LINE user ID")
     result = await db.execute(select(User).where(User.line_id == line_id))

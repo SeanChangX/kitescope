@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { userFetch, clearUserToken, USER_SESSION_EXPIRED_EVENT } from "../lib/auth";
 import { useI18n } from "../lib/i18n";
 import { useEffect, useState } from "react";
@@ -7,7 +7,9 @@ type UserInfo = { user_id: number; display_name: string; avatar: string } | null
 
 export default function AppHeader() {
   const { t, locale, setLocale } = useI18n();
+  const location = useLocation();
   const [user, setUser] = useState<UserInfo>(null);
+  const isNotificationsPage = location.pathname === "/notifications";
 
   useEffect(() => {
     userFetch("/api/auth/me")
@@ -61,11 +63,19 @@ export default function AppHeader() {
           {user ? (
             <>
               <Link
+                to="/"
+                className="text-xs rounded-md border border-border-dark px-2 py-1 text-text-secondary transition-all duration-200 hover:border-primary hover:text-primary sm:text-sm sm:px-3 sm:py-1.5"
+              >
+                {t("nav.home")}
+              </Link>
+              {!isNotificationsPage && (
+              <Link
                 to="/notifications"
                 className="text-xs rounded-md border border-border-dark px-2 py-1 text-text-secondary transition-all duration-200 hover:border-primary hover:text-primary sm:text-sm sm:px-3 sm:py-1.5"
               >
                 {t("nav.notifications")}
               </Link>
+              )}
               <span className="hidden max-w-[100px] truncate text-sm text-text-muted sm:block sm:px-1">
                 {user.display_name || "User"}
               </span>

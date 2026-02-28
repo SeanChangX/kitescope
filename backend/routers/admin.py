@@ -219,7 +219,7 @@ async def list_users(
             "display_name": r.display_name,
             "email": r.email,
             "avatar": r.avatar,
-            "last_seen": r.last_seen.isoformat() if r.last_seen else None,
+            "last_seen": (r.last_seen.isoformat() + "Z") if r.last_seen else None,
             "last_ip": r.last_ip,
             "banned": r.banned,
             "created_at": r.created_at.isoformat(),

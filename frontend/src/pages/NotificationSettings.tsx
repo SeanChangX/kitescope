@@ -213,17 +213,17 @@ export default function NotificationSettings() {
                   key={sub.id}
                   className="flex flex-col gap-3 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
                 >
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <span className="font-medium text-text-primary">{sub.source_name}</span>
                     <span className="ml-2 text-sm text-text-muted">
                       {formatSubDesc(sub, t)}
                     </span>
                   </div>
-                  <div className="flex w-full gap-2 sm:w-auto sm:flex-1 sm:min-w-0 sm:max-w-xs">
+                  <div className="flex shrink-0 justify-end gap-2">
                     <button
                       type="button"
                       onClick={() => toggleEnabled(sub)}
-                      className={`ks-btn flex-1 min-w-0 py-1.5 text-sm sm:flex-none ${
+                      className={`ks-btn w-20 py-1.5 text-sm ${
                         sub.enabled
                           ? "ks-btn-secondary"
                           : "bg-ks-success/20 text-ks-success hover:bg-ks-success/30 hover:text-white"
@@ -234,7 +234,7 @@ export default function NotificationSettings() {
                     <button
                       type="button"
                       onClick={() => remove(sub.id)}
-                      className="ks-btn flex-1 min-w-0 py-1.5 text-sm rounded-lg bg-ks-danger/20 text-ks-danger hover:bg-ks-danger hover:text-white sm:flex-none"
+                      className="ks-btn w-20 py-1.5 text-sm rounded-lg bg-ks-danger/20 text-ks-danger hover:bg-ks-danger hover:text-white"
                     >
                       {t("notifications.remove")}
                     </button>
