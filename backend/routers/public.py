@@ -14,7 +14,7 @@ from datetime import timedelta
 from database import get_db, AsyncSessionLocal
 from models import Source, CountHistory, PendingSource, BotConfig
 from utils import detect_source_type
-from auth_admin import get_current_user_optional
+from auth_admin import get_current_user
 
 router = APIRouter()
 
@@ -29,17 +29,16 @@ class SuggestSourceBody(BaseModel):
 async def suggest_source(
     body: SuggestSourceBody,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user_optional),
+    user=Depends(get_current_user),
 ):
-    """Submit a new stream suggestion (URL + location). Type is auto-detected. Optional: Bearer user token to link suggestion and update last_seen."""
+    """Submit a new stream suggestion (URL + location). Type is auto-detected. Requires login."""
     source_type = detect_source_type(body.url)
-    user_id = user.id if user else None
     pending = PendingSource(
         url=body.url,
         type=source_type,
         name=body.name or "",
         location=body.location or "",
-        user_id=user_id,
+        user_id=user.id,
     )
     db.add(pending)
     await db.flush()

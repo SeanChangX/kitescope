@@ -2,6 +2,28 @@
 import httpx
 
 LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push"
+
+
+def format_kite_notification(
+    count: int,
+    place: str,
+    weather: str | None = None,
+    view_url: str | None = None,
+) -> str:
+    """Build a bot-style notification: friendly tone, optional view link."""
+    lines = [
+        "──────",
+        f"  Spotted {int(count)} kites at {place}.",
+    ]
+    if weather:
+        lines.append(f"  Weather: {weather}.")
+    if view_url and view_url.strip():
+        lines.append("")
+        lines.append(f"  View live: {view_url.strip()}")
+    lines.append("──────")
+    return "\n".join(lines)
+
+
 TELEGRAM_SEND_URL = "https://api.telegram.org/bot{token}/sendMessage"
 TELEGRAM_PHOTO_URL = "https://api.telegram.org/bot{token}/sendPhoto"
 

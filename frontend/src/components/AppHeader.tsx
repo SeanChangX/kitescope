@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { userFetch, clearUserToken, USER_SESSION_EXPIRED_EVENT } from "../lib/auth";
+import { userFetch, clearUserToken, getUserToken, USER_SESSION_EXPIRED_EVENT } from "../lib/auth";
 import { useI18n } from "../lib/i18n";
 import { useEffect, useState } from "react";
 
@@ -9,15 +9,27 @@ export default function AppHeader() {
   const { t, locale, setLocale } = useI18n();
   const location = useLocation();
   const [user, setUser] = useState<UserInfo>(null);
+  const [authChecked, setAuthChecked] = useState(!getUserToken());
   const isHomePage = location.pathname === "/";
   const isNotificationsPage = location.pathname === "/notifications";
 
   useEffect(() => {
+    if (!getUserToken()) {
+      setUser(null);
+      setAuthChecked(true);
+      return;
+    }
     userFetch("/api/auth/me")
       .then((r) => r.json().catch(() => null))
       .then((d) => (d?.user_id != null ? { user_id: d.user_id, display_name: d.display_name || "", avatar: d.avatar || "" } : null))
-      .then(setUser)
-      .catch(() => setUser(null));
+      .then((u) => {
+        setUser(u);
+        setAuthChecked(true);
+      })
+      .catch(() => {
+        setUser(null);
+        setAuthChecked(true);
+      });
   }, []);
 
   useEffect(() => {
@@ -61,7 +73,11 @@ export default function AppHeader() {
               繁中
             </button>
           </div>
-          {user ? (
+          {!authChecked ? (
+            <span className="ks-btn shrink-0 py-1.5 px-3 text-sm border border-transparent text-transparent select-none pointer-events-none sm:py-2.5 sm:px-5" aria-hidden>
+              {t("nav.login")}
+            </span>
+          ) : user ? (
             <>
               {!isHomePage && (
               <Link

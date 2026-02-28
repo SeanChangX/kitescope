@@ -42,6 +42,8 @@ export default function NotificationSettings() {
   const [newCooldown, setNewCooldown] = useState(30);
   const [adding, setAdding] = useState(false);
   const [message, setMessage] = useState("");
+  const [testLoading, setTestLoading] = useState(false);
+  const [testMessage, setTestMessage] = useState("");
 
   function load() {
     setLoading(true);
@@ -106,6 +108,19 @@ export default function NotificationSettings() {
     if (r.ok) load();
   }
 
+  async function sendTest() {
+    setTestMessage("");
+    setTestLoading(true);
+    const r = await userFetch(`${API}/notifications/test`, { method: "POST" });
+    const data = await r.json().catch(() => ({}));
+    setTestLoading(false);
+    if (r.ok) {
+      setTestMessage(t("notifications.testSent"));
+    } else {
+      setTestMessage((data.detail as string) || t("notifications.testFailed"));
+    }
+  }
+
   if (unauth) {
     return (
       <div className="min-h-screen bg-bg-primary px-4 py-12">
@@ -140,6 +155,21 @@ export default function NotificationSettings() {
           {t("notifications.title")}
         </h1>
         <p className="mb-6 text-sm text-text-secondary">{t("notifications.description")}</p>
+        <div className="mb-8 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={sendTest}
+            disabled={testLoading}
+            className="ks-btn ks-btn-secondary disabled:opacity-50"
+          >
+            {testLoading ? t("notifications.sendingTest") : t("notifications.test")}
+          </button>
+          {testMessage && (
+            <span className={`text-sm ${testMessage === t("notifications.testSent") ? "text-ks-success" : "text-ks-danger"}`}>
+              {testMessage}
+            </span>
+          )}
+        </div>
 
         <form onSubmit={addSub} className="ks-card mb-8">
           <h2 className="font-gaming mb-3 font-medium text-text-primary">

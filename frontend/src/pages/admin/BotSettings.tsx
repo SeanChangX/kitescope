@@ -14,6 +14,7 @@ type BotState = {
     configured: boolean;
   };
   telegram: { bot_token: string; configured: boolean };
+  public_app_url: string;
 };
 
 export default function BotSettings() {
@@ -29,6 +30,7 @@ export default function BotSettings() {
     line_login_channel_id: "",
     line_login_channel_secret: "",
     telegram_bot_token: "",
+    public_app_url: "",
   });
 
   useEffect(() => {
@@ -45,6 +47,7 @@ export default function BotSettings() {
             line_login_channel_id: d.line?.login_channel_id ?? "",
             line_login_channel_secret: "",
             telegram_bot_token: "",
+            public_app_url: d.public_app_url ?? "",
           }));
         }
       })
@@ -57,6 +60,7 @@ export default function BotSettings() {
         ...f,
         line_channel_id: data.line?.channel_id ?? "",
         line_login_channel_id: data.line?.login_channel_id ?? "",
+        public_app_url: data.public_app_url ?? "",
       }));
     }
   }, [data]);
@@ -71,6 +75,7 @@ export default function BotSettings() {
     if (form.line_login_channel_id !== undefined) body.line_login_channel_id = form.line_login_channel_id;
     if (form.line_login_channel_secret && form.line_login_channel_secret !== MASK) body.line_login_channel_secret = form.line_login_channel_secret;
     if (form.telegram_bot_token && form.telegram_bot_token !== MASK) body.telegram_bot_token = form.telegram_bot_token;
+    if (form.public_app_url !== undefined) body.public_app_url = form.public_app_url;
     const r = await authFetch("/api/admin/settings/bots", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -150,6 +155,17 @@ export default function BotSettings() {
           {data?.telegram?.configured && (
             <p className="text-xs text-text-muted">{t("admin.telegramConfiguredHint")}</p>
           )}
+        </div>
+        <div>
+          <h4 className="text-sm font-medium text-text-secondary mb-2">{t("admin.publicAppUrl")}</h4>
+          <input
+            type="url"
+            placeholder={t("admin.publicAppUrlPlaceholder")}
+            value={form.public_app_url}
+            onChange={(e) => setForm((f) => ({ ...f, public_app_url: e.target.value }))}
+            className="ks-input"
+          />
+          <p className="text-xs text-text-muted mt-1">{t("admin.publicAppUrlHint")}</p>
         </div>
         {message && <p className="text-sm text-text-secondary">{message}</p>}
         <button

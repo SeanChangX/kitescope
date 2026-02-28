@@ -10,6 +10,8 @@ type Pending = {
   type: string;
   name: string;
   location: string;
+  user_id: number | null;
+  submitted_by: string | null;
   created_at: string;
 };
 
@@ -96,6 +98,9 @@ export default function PendingSources() {
                   <span className="ml-2 text-text-muted">{p.type}</span>
                   <div className="truncate text-text-muted">{p.url}</div>
                   {p.location && <div className="text-text-muted">Location: {p.location}</div>}
+                  {(p.submitted_by != null && p.submitted_by !== "") && (
+                    <div className="text-text-muted text-xs mt-0.5">{t("admin.submittedBy")}: {p.submitted_by}</div>
+                  )}
                 </div>
               </div>
               <div className="flex w-full gap-2">

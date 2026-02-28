@@ -5,8 +5,9 @@ from sqlalchemy import select
 from pydantic import BaseModel
 
 from database import get_db
-from models import NotificationSubscription, User, Source
+from models import NotificationSubscription, User, Source, BotConfig
 from auth_admin import get_current_user, get_notification_channel_required
+from notify import format_kite_notification, send_line_message, send_telegram_message
 
 router = APIRouter()
 
@@ -140,3 +141,30 @@ async def delete_subscription(
         raise HTTPException(status_code=404, detail="Subscription not found")
     await db.flush()
     return {"message": "Deleted"}
+
+
+@router.post("/notifications/test")
+async def send_test_notification(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+    channel: str = Depends(get_notification_channel_required),
+):
+    """Send a sample notification to the current user (same format as real threshold alerts)."""
+    bot_rows = (await db.execute(select(BotConfig))).scalars().all()
+    by_key = {r.key: r.value for r in bot_rows}
+    line_token = (by_key.get("line_channel_access_token") or "").strip()
+    telegram_token = (by_key.get("telegram_bot_token") or "").strip()
+    view_url = (by_key.get("public_app_url") or "").strip().rstrip("/") or None
+    channel_lower = channel.lower()
+    msg = format_kite_notification(5, "Test stream", "Clear, 22 C", view_url)
+    if channel_lower == "line":
+        if not user.line_id or not line_token:
+            raise HTTPException(status_code=400, detail="LINE not linked or bot not configured")
+        ok = await send_line_message(line_token, user.line_id, msg)
+    else:
+        if not user.telegram_id or not telegram_token:
+            raise HTTPException(status_code=400, detail="Telegram not linked or bot not configured")
+        ok = await send_telegram_message(telegram_token, user.telegram_id, msg)
+    if not ok:
+        raise HTTPException(status_code=502, detail="Failed to send message")
+    return {"message": "Test notification sent"}

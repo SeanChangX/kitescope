@@ -7,7 +7,7 @@ import httpx
 
 from database import AsyncSessionLocal
 from models import CountHistory, NotificationSubscription, User, BotConfig, Source
-from notify import send_line_message, send_telegram_message, send_telegram_photo
+from notify import format_kite_notification, send_line_message, send_telegram_message, send_telegram_photo
 from weather import get_weather_for_location
 
 VISION_URL = os.getenv("VISION_URL", "http://vision:9000")
@@ -60,9 +60,8 @@ async def _run_once() -> None:
                     continue
             place = source.name or source.location or "stream"
             weather_str = await get_weather_for_location(source.location or "")
-            msg = f"KiteScope: {int(count)} kites at {place}."
-            if weather_str:
-                msg += f" Weather: {weather_str}."
+            view_url = (by_key.get("public_app_url") or os.getenv("PUBLIC_APP_URL") or "").strip().rstrip("/") or None
+            msg = format_kite_notification(int(count), place, weather_str or None, view_url)
             channel = (sub.channel or "telegram").lower()
             sent = False
             if channel == "line" and user.line_id and line_token:

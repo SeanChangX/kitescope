@@ -11,6 +11,7 @@ type User = {
   last_ip: string | null;
   banned: boolean;
   created_at: string;
+  channel: string;
 };
 
 export default function UserList() {
@@ -64,6 +65,7 @@ export default function UserList() {
                   <th className="py-2 pr-2">{t("admin.userId")}</th>
                   <th className="py-2 pr-2">{t("admin.userName")}</th>
                   <th className="py-2 pr-2">{t("admin.userEmail")}</th>
+                  <th className="py-2 pr-2">{t("admin.userChannel")}</th>
                   <th className="py-2 pr-2">{t("admin.lastSeen")}</th>
                   <th className="py-2 pr-2">{t("admin.banned")}</th>
                   <th className="py-2">{t("admin.actions")}</th>
@@ -75,6 +77,9 @@ export default function UserList() {
                     <td className="py-2 pr-2 text-text-primary">{u.id}</td>
                     <td className="py-2 pr-2 text-text-primary">{u.display_name || "-"}</td>
                     <td className="py-2 pr-2 text-text-secondary">{u.email || "-"}</td>
+                    <td className="py-2 pr-2 text-text-secondary">
+                      {u.channel ? u.channel.split(",").map((c: string) => t(c === "line" ? "admin.line" : "admin.telegram")).join(", ") : "-"}
+                    </td>
                     <td className="py-2 pr-2 text-text-secondary">{u.last_seen ? new Date(u.last_seen).toLocaleString() : "-"}</td>
                     <td className="py-2 pr-2 text-text-secondary">{u.banned ? t("admin.yes") : t("admin.no")}</td>
                     <td className="py-2 flex gap-2">
@@ -118,6 +123,8 @@ export default function UserList() {
                 <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-text-secondary">
                   <dt>{t("admin.userEmail")}</dt>
                   <dd>{u.email || "-"}</dd>
+                  <dt>{t("admin.userChannel")}</dt>
+                  <dd>{u.channel ? u.channel.split(",").map((c: string) => t(c === "line" ? "admin.line" : "admin.telegram")).join(", ") : "-"}</dd>
                   <dt>{t("admin.lastSeen")}</dt>
                   <dd>{u.last_seen ? new Date(u.last_seen).toLocaleString() : "-"}</dd>
                   <dt>{t("admin.banned")}</dt>
