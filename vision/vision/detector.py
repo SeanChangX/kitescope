@@ -7,14 +7,37 @@ from typing import List, Tuple
 
 log = logging.getLogger(__name__)
 
-MODEL_PATH = os.getenv("MODEL_PATH", "/app/models/kite_nano.onnx")
+MODELS_DIR = os.getenv("MODELS_DIR", "").strip().rstrip("/")
+_DEFAULT_MODEL_PATH = os.getenv("MODEL_PATH", "/app/models/kite_nano.onnx")
+MODEL_PATH = _DEFAULT_MODEL_PATH
 CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.5"))
 IOU_THRESHOLD = float(os.getenv("IOU_THRESHOLD", "0.45"))
+
+
+def set_confidence_threshold(value: float) -> None:
+    """Update confidence threshold at runtime (e.g. from admin). Clamped to 0-1."""
+    global CONFIDENCE_THRESHOLD
+    CONFIDENCE_THRESHOLD = max(0.0, min(1.0, value))
 KITE_CLASS_ID = int(os.getenv("KITE_CLASS_ID", "0"))  # Class index to count as kite (0 for single-class)
 INPUT_SIZE = int(os.getenv("DETECT_INPUT_SIZE", "640"))
 
 _session = None
 _session_logged = False
+
+
+def reload_model(filename: str) -> bool:
+    """Switch to model by filename under MODELS_DIR. Clears cached session so next inference loads it. Returns True if path exists."""
+    global MODEL_PATH, _session, _session_logged
+    if not filename or ".." in filename or "/" in filename or "\\" in filename:
+        return False
+    path = os.path.join(MODELS_DIR, filename) if MODELS_DIR else filename
+    if not os.path.isfile(path):
+        return False
+    MODEL_PATH = path
+    _session = None
+    _session_logged = False
+    log.info("Model will reload from %s on next inference", MODEL_PATH)
+    return True
 
 
 def _get_session():

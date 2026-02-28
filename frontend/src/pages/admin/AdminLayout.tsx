@@ -8,6 +8,7 @@ import ManageSources from "./ManageSources";
 import ChangePassword from "./ChangePassword";
 import BotSettings from "./BotSettings";
 import HistorySettings from "./HistorySettings";
+import ModelSettings from "./ModelSettings";
 import BackupRestore from "./BackupRestore";
 import UserList from "./UserList";
 import Broadcast from "./Broadcast";
@@ -33,6 +34,7 @@ function AdminSettings() {
       <ChangePassword />
       <BotSettings />
       <HistorySettings />
+      <ModelSettings />
       <BackupRestore />
     </div>
   );

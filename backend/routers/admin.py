@@ -1,5 +1,6 @@
+import os
 import re
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, func, or_
 from pydantic import BaseModel
@@ -11,6 +12,7 @@ from auth_admin import get_current_admin
 from utils import should_proxy_via_go2rtc
 from go2rtc_client import register_go2rtc_stream_by_name, delete_go2rtc_stream
 from notify import DEFAULT_NOTIFY_FORMAT
+from secret_config import get_internal_secret
 
 router = APIRouter()
 
@@ -436,6 +438,176 @@ async def put_notify_format(
     return {"message": "Saved"}
 
 
+# Detection model upload/select/delete; shared with vision via MODELS_DIR (e.g. volume mount)
+MODELS_DIR = os.getenv("MODELS_DIR", "data/models")
+VISION_SELECTED_MODEL_KEY = "vision_selected_model"
+VISION_CONFIDENCE_THRESHOLD_KEY = "vision_confidence_threshold"
+
+_ALLOWED_MODEL_NAME = re.compile(r"^[a-zA-Z0-9_.-]+\.onnx$")
+
+
+def _safe_model_filename(name: str) -> str | None:
+    """Return basename if it matches allowed pattern else None."""
+    base = os.path.basename(name).strip()
+    return base if _ALLOWED_MODEL_NAME.match(base) else None
+
+
+def _models_dir_ensure() -> str:
+    os.makedirs(MODELS_DIR, exist_ok=True)
+    return MODELS_DIR
+
+
+@router.get("/settings/models")
+async def get_models(
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(_admin_only),
+):
+    """List uploaded .onnx model filenames, current selection, and confidence threshold."""
+    _models_dir_ensure()
+    models = []
+    try:
+        for f in os.listdir(MODELS_DIR):
+            if f.endswith(".onnx") and _ALLOWED_MODEL_NAME.match(f):
+                models.append(f)
+    except OSError:
+        pass
+    models.sort()
+    r = await db.execute(select(BotConfig).where(BotConfig.key.in_([VISION_SELECTED_MODEL_KEY, VISION_CONFIDENCE_THRESHOLD_KEY])))
+    rows = r.scalars().all()
+    by_key = {row.key: row.value for row in rows}
+    selected = (by_key.get(VISION_SELECTED_MODEL_KEY) or "").strip() or None
+    if selected and selected not in models:
+        selected = None
+    try:
+        confidence_threshold = float(by_key.get(VISION_CONFIDENCE_THRESHOLD_KEY) or "0.5")
+    except (TypeError, ValueError):
+        confidence_threshold = 0.5
+    return {"models": models, "selected": selected, "confidence_threshold": confidence_threshold}
+
+
+@router.post("/settings/models/upload")
+async def upload_model(
+    file: UploadFile = File(...),
+    _: None = Depends(_admin_only),
+):
+    """Upload an ONNX model file. Returns new filename (may be uniquified)."""
+    _models_dir_ensure()
+    name = _safe_model_filename(file.filename or "")
+    if not name:
+        raise HTTPException(status_code=400, detail="Invalid or missing filename; use a .onnx file")
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty file")
+    path = os.path.join(MODELS_DIR, name)
+    if os.path.isfile(path):
+        base, ext = os.path.splitext(name)
+        for i in range(1, 100):
+            name = f"{base}_{i}{ext}"
+            path = os.path.join(MODELS_DIR, name)
+            if not os.path.isfile(path):
+                break
+    with open(path, "wb") as f:
+        f.write(content)
+    return {"filename": name}
+
+
+@router.delete("/settings/models/{filename:path}")
+async def delete_model(
+    filename: str,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(_admin_only),
+):
+    """Remove an uploaded model file. If it was selected, selection is cleared."""
+    safe = _safe_model_filename(filename)
+    if not safe:
+        raise HTTPException(status_code=400, detail="Invalid model filename")
+    path = os.path.join(MODELS_DIR, safe)
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="Model not found")
+    try:
+        os.remove(path)
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    r = await db.execute(select(BotConfig).where(BotConfig.key == VISION_SELECTED_MODEL_KEY))
+    row = r.scalar_one_or_none()
+    if row and (row.value or "").strip() == safe:
+        row.value = ""
+        row.updated_at = datetime.utcnow()
+        await db.flush()
+    return {"message": "Deleted"}
+
+
+class ModelSelectedBody(BaseModel):
+    selected: str | None = None
+    confidence_threshold: float | None = None
+
+
+@router.put("/settings/models")
+async def put_model_selected(
+    body: ModelSelectedBody,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(_admin_only),
+):
+    """Set selected model and/or confidence threshold; tell vision to apply. Empty selected clears selection."""
+    import httpx
+    selected = (body.selected or "").strip() or None
+    confidence_threshold = body.confidence_threshold
+    if selected:
+        safe = _safe_model_filename(selected)
+        if not safe:
+            raise HTTPException(status_code=400, detail="Invalid model filename")
+        path = os.path.join(MODELS_DIR, safe)
+        if not os.path.isfile(path):
+            raise HTTPException(status_code=404, detail="Model file not found")
+        selected = safe
+    now = datetime.utcnow()
+    r = await db.execute(select(BotConfig).where(BotConfig.key == VISION_SELECTED_MODEL_KEY))
+    row = r.scalar_one_or_none()
+    if row:
+        row.value = selected or ""
+        row.updated_at = now
+    else:
+        db.add(BotConfig(key=VISION_SELECTED_MODEL_KEY, value=selected or "", updated_at=now))
+    await db.flush()
+    vision_url = os.getenv("VISION_URL", "http://vision:9000").rstrip("/")
+    secret = get_internal_secret()
+    if selected:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                r = await client.post(
+                    f"{vision_url}/reload-model",
+                    params={"model": selected},
+                    headers={"X-Internal-Secret": secret} if secret else None,
+                )
+                if r.status_code != 200:
+                    raise HTTPException(status_code=502, detail="Vision reload failed: " + (r.text or str(r.status_code)))
+        except httpx.RequestError as e:
+            raise HTTPException(status_code=502, detail="Vision service unreachable: " + str(e))
+    if confidence_threshold is not None:
+        v = max(0.0, min(1.0, float(confidence_threshold)))
+        now_confidence = datetime.utcnow()
+        r = await db.execute(select(BotConfig).where(BotConfig.key == VISION_CONFIDENCE_THRESHOLD_KEY))
+        row = r.scalar_one_or_none()
+        if row:
+            row.value = str(v)
+            row.updated_at = now_confidence
+        else:
+            db.add(BotConfig(key=VISION_CONFIDENCE_THRESHOLD_KEY, value=str(v), updated_at=now_confidence))
+        await db.flush()
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                r = await client.post(
+                    f"{vision_url}/config",
+                    json={"confidence_threshold": v},
+                    headers={"X-Internal-Secret": secret} if secret else None,
+                )
+                if r.status_code != 200:
+                    raise HTTPException(status_code=502, detail="Vision config update failed: " + (r.text or str(r.status_code)))
+        except httpx.RequestError as e:
+            raise HTTPException(status_code=502, detail="Vision service unreachable: " + str(e))
+    return {"message": "Saved and applied" if (selected or confidence_threshold is not None) else "Saved"}
+
+
 class BotSettingsBody(BaseModel):
     line_channel_id: str | None = None
     line_channel_secret: str | None = None
@@ -547,7 +719,7 @@ async def backup_settings(
     user_rows = (await db.execute(select(User).order_by(User.id))).scalars().all()
     sub_rows = (await db.execute(select(NotificationSubscription).order_by(NotificationSubscription.id))).scalars().all()
     bot_rows = (await db.execute(select(BotConfig).where(BotConfig.key.in_(_BOT_KEYS_BACKUP)))).scalars().all()
-    history_rows = (await db.execute(select(BotConfig).where(BotConfig.key.in_(["history_retention_days", "history_default_interval", "notify_format_template"])))).scalars().all()
+    history_rows = (await db.execute(select(BotConfig).where(BotConfig.key.in_(["history_retention_days", "history_default_interval", "notify_format_template", VISION_SELECTED_MODEL_KEY, VISION_CONFIDENCE_THRESHOLD_KEY])))).scalars().all()
     by_key = {r.key: r.value for r in history_rows}
     return {
         "version": _BACKUP_VERSION,
@@ -579,6 +751,8 @@ async def backup_settings(
             "default_interval": by_key.get("history_default_interval") or "hour",
         },
         "notify_format": by_key.get("notify_format_template") or "",
+        "vision_selected_model": by_key.get(VISION_SELECTED_MODEL_KEY) or "",
+        "vision_confidence_threshold": by_key.get(VISION_CONFIDENCE_THRESHOLD_KEY) or "",
     }
 
 
@@ -730,5 +904,30 @@ async def restore_settings(
             row.updated_at = now
         else:
             db.add(BotConfig(key="notify_format_template", value=v, updated_at=now))
+    vsm = data.get("vision_selected_model")
+    if vsm is not None:
+        v = (vsm if isinstance(vsm, str) else "").strip()
+        if v and not _safe_model_filename(v):
+            v = ""
+        r = await db.execute(select(BotConfig).where(BotConfig.key == VISION_SELECTED_MODEL_KEY))
+        row = r.scalar_one_or_none()
+        if row:
+            row.value = v
+            row.updated_at = now
+        else:
+            db.add(BotConfig(key=VISION_SELECTED_MODEL_KEY, value=v, updated_at=now))
+    vct = data.get("vision_confidence_threshold")
+    if vct is not None:
+        try:
+            v = str(max(0.0, min(1.0, float(vct))))
+        except (TypeError, ValueError):
+            v = "0.5"
+        r = await db.execute(select(BotConfig).where(BotConfig.key == VISION_CONFIDENCE_THRESHOLD_KEY))
+        row = r.scalar_one_or_none()
+        if row:
+            row.value = v
+            row.updated_at = now
+        else:
+            db.add(BotConfig(key=VISION_CONFIDENCE_THRESHOLD_KEY, value=v, updated_at=now))
     await db.flush()
     return {"message": "Restored"}

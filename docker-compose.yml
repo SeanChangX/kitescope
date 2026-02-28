@@ -31,11 +31,13 @@ services:
       - "8000:8000"
     volumes:
       - kitescope_data:/app/data
+      - vision_models:/app/models
     environment:
       - DATABASE_URL=sqlite:////app/data/kitescope.db
       - INTERNAL_SECRET_FILE=/app/data/internal_secret
-      - GO2RTC_BASE_URL=http://go2rtc:1984
       - VISION_URL=http://vision:9000
+      - MODELS_DIR=/app/models
+      - GO2RTC_BASE_URL=http://go2rtc:1984
     env_file:
       - .env
     healthcheck:
@@ -59,9 +61,7 @@ services:
       - GO2RTC_BASE_URL=http://go2rtc:1984
       - BACKEND_URL=http://backend:8000
       - INTERNAL_SECRET_FILE=/app/data/internal_secret
-      - MODEL_PATH=/app/models/kite_nano.onnx
-      - CONFIDENCE_THRESHOLD=0.5
-      - SKIP_FRAMES=3
+      - MODELS_DIR=/app/models
       - VISION_LOOP_INTERVAL_SEC=30
     env_file:
       - .env
