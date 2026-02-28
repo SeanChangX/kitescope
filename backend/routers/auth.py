@@ -231,9 +231,9 @@ async def auth_me(
     user: User | None = Depends(get_current_user_optional),
     channel: str | None = Depends(get_notification_channel),
 ):
-    """Return current user info if logged in with user token; else 401."""
+    """Return current user info if logged in; 200 with user=null when not (avoids 401 in console)."""
     if user is None:
-        raise HTTPException(status_code=401, detail="Not logged in")
+        return {"user_id": None, "display_name": "", "avatar": "", "line_id": False, "telegram_id": False, "notification_channel": None}
     notification_channel = channel
     if not notification_channel:
         if user.line_id and not user.telegram_id:

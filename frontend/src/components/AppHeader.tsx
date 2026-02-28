@@ -13,8 +13,8 @@ export default function AppHeader() {
 
   useEffect(() => {
     userFetch("/api/auth/me")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => (d ? { user_id: d.user_id, display_name: d.display_name || "", avatar: d.avatar || "" } : null))
+      .then((r) => r.json().catch(() => null))
+      .then((d) => (d?.user_id != null ? { user_id: d.user_id, display_name: d.display_name || "", avatar: d.avatar || "" } : null))
       .then(setUser)
       .catch(() => setUser(null));
   }, []);
