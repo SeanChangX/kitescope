@@ -41,6 +41,7 @@ class PendingSource(Base):
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = {"sqlite_autoincrement": True}
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     line_id: Mapped[str | None] = mapped_column(String(128), unique=True, nullable=True)
     telegram_id: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)

@@ -334,6 +334,7 @@ async def delete_user(
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    await db.execute(delete(NotificationSubscription).where(NotificationSubscription.user_id == user_id))
     await db.delete(user)
     await db.flush()
     return {"message": "User deleted"}

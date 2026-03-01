@@ -1,5 +1,6 @@
 # SQLite + SQLAlchemy async; single DB file in /app/data
 import os
+import re
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
@@ -75,9 +76,41 @@ def _add_user_welcome_sent_at(conn):
         conn.execute(text("ALTER TABLE users ADD COLUMN welcome_sent_at DATETIME"))
 
 
+def _migrate_users_autoincrement(conn):
+    """Recreate users table with SQLite AUTOINCREMENT so deleted IDs are never reused."""
+    if "sqlite" not in DATABASE_URL:
+        return
+    result = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='users'"))
+    if not result.fetchone():
+        return
+    result = conn.execute(text("SELECT name FROM sqlite_sequence WHERE name='users'"))
+    if result.fetchone():
+        return
+    result = conn.execute(text("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'"))
+    row = result.fetchone()
+    if not row:
+        return
+    create_sql = row[0]
+    if "AUTOINCREMENT" in create_sql:
+        return
+    new_sql = re.sub(
+        r"INTEGER PRIMARY KEY(?!\s+AUTOINCREMENT)",
+        "INTEGER PRIMARY KEY AUTOINCREMENT",
+        create_sql,
+        count=1,
+    )
+    new_sql = new_sql.replace("CREATE TABLE users(", "CREATE TABLE users_new(", 1)
+    new_sql = new_sql.replace('CREATE TABLE "users"(', 'CREATE TABLE "users_new"(', 1)
+    conn.execute(text(new_sql))
+    conn.execute(text("INSERT INTO users_new SELECT * FROM users"))
+    conn.execute(text("DROP TABLE users"))
+    conn.execute(text("ALTER TABLE users_new RENAME TO users"))
+
+
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_migrate_users_autoincrement)
         await conn.run_sync(_add_notification_columns)
         await conn.run_sync(_add_source_direct_embed)
         await conn.run_sync(_add_source_origin_url)
