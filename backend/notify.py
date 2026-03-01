@@ -3,16 +3,23 @@ import httpx
 
 LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push"
 
-WELCOME_MESSAGE = (
-    "Welcome to KiteScope.\n"
-    "Subscribe to streams to get notified when the kite count reaches your threshold. "
-    "Use the Notifications page to add subscriptions.\n"
-    "GitHub: https://github.com/SeanChangX/KiteScope"
+WELCOME_MESSAGE_TEMPLATE = (
+    "\U0001FA81 Welcome to KiteScope\n\n"
+    "Real-time kite count and flight monitoring.\n\n"
+    "\U0001F514 Set notification threshold\n"
+    "Get notified when the count reaches your condition.\n\n"
+    "\U0001F310 Live view\n"
+    "{view_url}\n\n"
+    "\U0001F517 GitHub\n"
+    "https://github.com/SeanChangX/KiteScope"
 )
 
 DEFAULT_NOTIFY_FORMAT = (
-    "[ Spotted {count} kites ] [ {place} ]\n"
-    "Weather: {weather}\n"
+    "\U0001FA81 KiteScope Alert\n\n"
+    "\U0001F4CD {place}\n"
+    "\U0001F7E1 {count} kites detected\n\n"
+    "{weather}\n\n"
+    "\U0001F517 Live view\n"
     "{view_url}"
 )
 
@@ -40,6 +47,8 @@ def format_kite_notification(
         if s == "Weather: " or s == "Weather:":
             continue
         lines.append(s)
+    while lines and not lines[-1]:
+        lines.pop()
     return "\n".join(lines).strip()
 
 

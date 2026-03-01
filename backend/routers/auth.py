@@ -31,24 +31,26 @@ from auth_admin import (
     cookie_params,
 )
 from rate_limit import rate_limit_admin_auth
-from notify import send_line_message, send_telegram_message, WELCOME_MESSAGE
+from notify import send_line_message, send_telegram_message, WELCOME_MESSAGE_TEMPLATE
 
 router = APIRouter()
 
 
 async def _send_welcome_if_configured(db: AsyncSession, user: User, channel: str) -> None:
     """Send welcome message to new user via LINE or Telegram; set welcome_sent_at."""
-    result = await db.execute(select(BotConfig).where(BotConfig.key.in_(["line_channel_access_token", "telegram_bot_token"])))
+    result = await db.execute(select(BotConfig).where(BotConfig.key.in_(["line_channel_access_token", "telegram_bot_token", "public_app_url"])))
     by_key = {r.key: r.value for r in result.scalars().all()}
+    view_url = (by_key.get("public_app_url") or "").strip().rstrip("/") or "https://kitescope.example.com"
+    welcome_text = WELCOME_MESSAGE_TEMPLATE.format(view_url=view_url)
     sent = False
     if channel == "line" and user.line_id:
         token = (by_key.get("line_channel_access_token") or "").strip()
         if token:
-            sent = await send_line_message(token, user.line_id, WELCOME_MESSAGE)
+            sent = await send_line_message(token, user.line_id, welcome_text)
     elif channel == "telegram" and user.telegram_id:
         token = (by_key.get("telegram_bot_token") or "").strip()
         if token:
-            sent = await send_telegram_message(token, user.telegram_id, WELCOME_MESSAGE)
+            sent = await send_telegram_message(token, user.telegram_id, welcome_text)
     if sent:
         user.welcome_sent_at = datetime.utcnow()
         db.add(user)
