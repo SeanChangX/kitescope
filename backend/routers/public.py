@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import time
 from fastapi import APIRouter, Depends, Query, HTTPException
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,11 +13,9 @@ import httpx
 log = logging.getLogger(__name__)
 
 # Shared vision HTTP client (connection pool) to avoid opening a new connection per preview request.
-# When many cards poll at once, reusing connections prevents vision overload and ReadTimeout.
 _vision_client: httpx.AsyncClient | None = None
 _vision_client_lock = asyncio.Lock()
-# Max concurrent snapshot requests to vision. Higher = less queue delay for many cards; too high can overload vision.
-_VISION_PREVIEW_CONCURRENCY = max(1, min(10, int(os.getenv("VISION_PREVIEW_CONCURRENCY", "4"))))
+_VISION_PREVIEW_CONCURRENCY = max(1, min(20, int(os.getenv("VISION_PREVIEW_CONCURRENCY", "8"))))
 _preview_semaphore = asyncio.Semaphore(_VISION_PREVIEW_CONCURRENCY)
 
 
@@ -24,7 +23,7 @@ async def get_vision_client() -> httpx.AsyncClient:
     global _vision_client
     async with _vision_client_lock:
         if _vision_client is None:
-            limits = httpx.Limits(max_keepalive_connections=4, max_connections=8, keepalive_expiry=30.0)
+            limits = httpx.Limits(max_keepalive_connections=8, max_connections=16, keepalive_expiry=30.0)
             _vision_client = httpx.AsyncClient(timeout=45.0, limits=limits)
         return _vision_client
 
@@ -35,6 +34,29 @@ async def close_vision_client() -> None:
         if _vision_client is not None:
             await _vision_client.aclose()
             _vision_client = None
+
+# --- Preview cache -----------------------------------------------------------
+# For each (source_id, overlay) we keep the latest JPEG in memory. All clients
+# requesting the same source within the TTL window get the cached frame instead
+# of each hitting vision independently.  With 30 users x 4 sources every 5 s =
+# 120 req/5s, this reduces actual vision calls to 4 per TTL window.
+
+_PREVIEW_CACHE_TTL = float(os.getenv("PREVIEW_CACHE_TTL", "2.0"))
+
+# (source_id, overlay_bool) -> (jpeg_bytes, detection_count_header|None, monotonic_timestamp)
+_preview_cache: dict[tuple[int, bool], tuple[bytes, str | None, float]] = {}
+
+# Per-key locks: when cache is stale, only ONE coroutine fetches from vision;
+# others wait on the lock and then read the freshly-populated cache.
+_preview_key_locks: dict[tuple[int, bool], asyncio.Lock] = {}
+_preview_key_locks_guard = asyncio.Lock()
+
+
+async def _get_key_lock(key: tuple[int, bool]) -> asyncio.Lock:
+    async with _preview_key_locks_guard:
+        if key not in _preview_key_locks:
+            _preview_key_locks[key] = asyncio.Lock()
+        return _preview_key_locks[key]
 
 from datetime import timedelta
 from database import get_db, AsyncSessionLocal
@@ -113,14 +135,21 @@ async def list_sources(db: AsyncSession = Depends(get_db)):
     return out
 
 
+def _make_preview_response(data: bytes, detection_count: str | None) -> Response:
+    headers = {"Cache-Control": "no-store, no-cache, must-revalidate"}
+    if detection_count is not None:
+        headers["X-Detection-Count"] = detection_count
+    return Response(content=data, media_type="image/jpeg", headers=headers)
+
+
 @router.get("/sources/{source_id}/preview")
 async def source_preview(
     source_id: int,
     overlay: bool = Query(True, description="Draw detection boxes on frame"),
-    t: str = Query("0", description="Preview tick; vision uses t*5 sec for YouTube seek"),
+    t: str = Query("0", description="Preview tick (cache-bust only; ignored by cache key)"),
 ):
-    """Live preview frame for an approved source. overlay=1 draws detection boxes. t=tick for YouTube time seek. Guest-accessible."""
-    # Use a short-lived session so we don't hold a DB connection during the long vision call (avoids pool exhaustion).
+    """Live preview frame. Cached per (source_id, overlay) so 30 concurrent
+    users only cause 1 vision call per TTL window instead of 30."""
     async with AsyncSessionLocal() as session:
         result = await session.execute(
             select(Source).where(Source.id == source_id, Source.enabled == True)
@@ -134,28 +163,45 @@ async def source_preview(
     direct_embed = getattr(row, "direct_embed", False)
     if direct_embed:
         overlay = False
-    vision_url = os.getenv("VISION_URL", "http://vision:9000")
-    try:
-        client = await get_vision_client()
-        async with _preview_semaphore:
-            r = await client.get(
-                f"{vision_url}/snapshot",
-                params={"url": row.url, "overlay": overlay, "t": t},
+
+    cache_key = (source_id, bool(overlay))
+
+    # Fast path: serve from cache if fresh.
+    cached = _preview_cache.get(cache_key)
+    if cached and (time.monotonic() - cached[2]) < _PREVIEW_CACHE_TTL:
+        return _make_preview_response(cached[0], cached[1])
+
+    # Cache miss / stale. Acquire per-key lock so only one coroutine fetches
+    # from vision; all other concurrent callers wait here and then hit the
+    # fresh cache above or read the just-populated entry below.
+    lock = await _get_key_lock(cache_key)
+    async with lock:
+        # Re-check after acquiring lock (another waiter may have refreshed).
+        cached = _preview_cache.get(cache_key)
+        if cached and (time.monotonic() - cached[2]) < _PREVIEW_CACHE_TTL:
+            return _make_preview_response(cached[0], cached[1])
+
+        vision_url = os.getenv("VISION_URL", "http://vision:9000")
+        try:
+            client = await get_vision_client()
+            async with _preview_semaphore:
+                r = await client.get(
+                    f"{vision_url}/snapshot",
+                    params={"url": row.url, "overlay": overlay, "t": t},
+                )
+            if r.status_code != 200:
+                body_preview = (r.text or (r.content.decode("utf-8", errors="replace") if r.content else ""))[:200]
+                log.warning("preview source_id=%s vision_status=%s body=%s", source_id, r.status_code, body_preview)
+                raise HTTPException(status_code=502, detail="Vision snapshot failed")
+            detection_count = r.headers.get("X-Detection-Count")
+            _preview_cache[cache_key] = (r.content, detection_count, time.monotonic())
+            return _make_preview_response(r.content, detection_count)
+        except httpx.RequestError as e:
+            log.warning(
+                "preview source_id=%s vision unreachable: %s %s",
+                source_id, type(e).__name__, str(e) or repr(e),
             )
-        if r.status_code != 200:
-            body_preview = (r.text or (r.content.decode("utf-8", errors="replace") if r.content else ""))[:200]
-            log.warning("preview source_id=%s vision_status=%s body=%s", source_id, r.status_code, body_preview)
-            raise HTTPException(status_code=502, detail="Vision snapshot failed")
-        headers = {"Cache-Control": "no-store, no-cache, must-revalidate"}
-        if "X-Detection-Count" in r.headers:
-            headers["X-Detection-Count"] = r.headers["X-Detection-Count"]
-        return Response(content=r.content, media_type="image/jpeg", headers=headers)
-    except httpx.RequestError as e:
-        log.warning(
-            "preview source_id=%s vision unreachable: %s %s",
-            source_id, type(e).__name__, str(e) or repr(e),
-        )
-        raise HTTPException(status_code=502, detail="Vision service unavailable")
+            raise HTTPException(status_code=502, detail="Vision service unavailable")
 
 
 @router.get("/history")

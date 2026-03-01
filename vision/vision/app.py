@@ -9,8 +9,8 @@ import os
 
 from vision.ingestion_loop import loop as ingestion_loop
 
-# Allow a few concurrent snapshots so YouTube (slow) and NVR (fast) can run in parallel; cap to avoid overload
-_snapshot_semaphore = asyncio.Semaphore(4)
+_SNAPSHOT_CONCURRENCY = max(1, min(20, int(os.getenv("VISION_SNAPSHOT_CONCURRENCY", "8"))))
+_snapshot_semaphore = asyncio.Semaphore(_SNAPSHOT_CONCURRENCY)
 # Throttle "snapshot failed" log per URL to avoid flooding when YouTube/server blocks same URL repeatedly
 _fail_log_throttle: dict[str, float] = {}
 _fail_log_interval_sec = 300

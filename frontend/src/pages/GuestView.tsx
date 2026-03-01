@@ -5,7 +5,7 @@ import { useI18n } from "../lib/i18n";
 
 const API = "/api";
 
-const PREVIEW_INTERVAL_MS = Number(import.meta.env.VITE_PREVIEW_INTERVAL_MS) || 3000;
+const PREVIEW_INTERVAL_MS = Number(import.meta.env.VITE_PREVIEW_INTERVAL_MS) || 5000;
 const COUNTS_INTERVAL_MS = Number(import.meta.env.VITE_COUNTS_INTERVAL_MS) || 3000;
 
 const COORDS_REGEX = /^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/;
@@ -29,7 +29,7 @@ function haversineKm(a: { lat: number; lon: number }, b: { lat: number; lon: num
   return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
 }
 
-type Source = { id: number; name: string; type: string; location: string; location_display?: string; enabled: boolean; url?: string };
+type Source = { id: number; name: string; type: string; location: string; location_display?: string; enabled: boolean; url?: string; direct_embed?: boolean };
 type Counts = Record<number, { count: number; recorded_at: string }>;
 
 export default function GuestView() {

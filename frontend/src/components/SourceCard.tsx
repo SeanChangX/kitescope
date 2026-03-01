@@ -96,7 +96,7 @@ type WeatherDetail = {
   wind_direction_80m?: string | null;
 };
 
-function isDirectEmbeddableUrl(url: string | undefined): boolean {
+export function isDirectEmbeddableUrl(url: string | undefined): boolean {
   if (!url) return false;
   const u = url.toLowerCase();
   return u.indexOf("youtube.com") === -1 && u.indexOf("youtu.be") === -1;
@@ -120,8 +120,7 @@ export default function SourceCard({ source, count, previewTick, staggerIndex = 
   const blobUrlRef = useRef<string | null>(null);
   const previewCancelledRef = useRef(false);
 
-  // Fetch proxy preview when not using embedded image URL (YouTube or no url). No overlay when recognition disabled.
-  // Stagger by staggerIndex so we don't send all cards' requests at once (avoids vision queue and "one by one" loading).
+  // Fetch proxy preview when not using embedded image URL. Stagger by staggerIndex so cards load one by one.
   useEffect(() => {
     if (useEmbeddedUrl) return;
     previewCancelledRef.current = false;
