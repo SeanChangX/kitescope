@@ -43,7 +43,7 @@ export default function AppHeader() {
     <header className="border-b border-border-dark bg-bg-secondary">
       <div className="mx-auto flex h-14 min-h-0 max-w-7xl items-center justify-between gap-2 px-4 sm:h-16 sm:px-6">
         <div className="flex min-w-0 shrink items-center gap-2 sm:gap-3">
-          <object data="/favicon.svg" type="image/svg+xml" aria-label={t("app.name")} className="h-8 w-8 shrink-0 sm:h-9 sm:w-9 pointer-events-none" />
+          <img src="/favicon.svg" alt={t("app.name")} className="h-8 w-8 shrink-0 sm:h-9 sm:w-9 brightness-0 invert" />
           <span className="font-gaming truncate text-base font-semibold text-text-primary sm:text-xl">
             {t("app.name")}
           </span>
