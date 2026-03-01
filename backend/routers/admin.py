@@ -735,6 +735,7 @@ async def backup_settings(
             {"id": r.id, "line_id": r.line_id, "telegram_id": r.telegram_id, "display_name": r.display_name or "",
              "avatar": r.avatar or "", "email": r.email or "", "banned": r.banned,
              "last_seen": r.last_seen.isoformat() if r.last_seen else None, "last_ip": r.last_ip or "",
+             "welcome_sent_at": r.welcome_sent_at.isoformat() if r.welcome_sent_at else None,
              "created_at": r.created_at.isoformat()}
             for r in user_rows
         ],
@@ -815,6 +816,12 @@ async def restore_settings(
                 last_seen = datetime.fromisoformat(str(row["last_seen"]).replace("Z", "+00:00"))
             except Exception:
                 pass
+        welcome_sent_at = None
+        if row.get("welcome_sent_at"):
+            try:
+                welcome_sent_at = datetime.fromisoformat(str(row["welcome_sent_at"]).replace("Z", "+00:00"))
+            except Exception:
+                pass
         db.add(User(
             id=row["id"],
             line_id=row.get("line_id"),
@@ -825,6 +832,7 @@ async def restore_settings(
             banned=row.get("banned", False),
             last_seen=last_seen,
             last_ip=row.get("last_ip", ""),
+            welcome_sent_at=welcome_sent_at,
             created_at=datetime.fromisoformat(row["created_at"].replace("Z", "+00:00")) if row.get("created_at") else datetime.utcnow(),
         ))
     await db.flush()

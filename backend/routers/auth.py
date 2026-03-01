@@ -5,6 +5,7 @@ import json
 import os
 import secrets
 import time
+from datetime import datetime
 from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -30,8 +31,27 @@ from auth_admin import (
     cookie_params,
 )
 from rate_limit import rate_limit_admin_auth
+from notify import send_line_message, send_telegram_message, WELCOME_MESSAGE
 
 router = APIRouter()
+
+
+async def _send_welcome_if_configured(db: AsyncSession, user: User, channel: str) -> None:
+    """Send welcome message to new user via LINE or Telegram; set welcome_sent_at."""
+    result = await db.execute(select(BotConfig).where(BotConfig.key.in_(["line_channel_access_token", "telegram_bot_token"])))
+    by_key = {r.key: r.value for r in result.scalars().all()}
+    sent = False
+    if channel == "line" and user.line_id:
+        token = (by_key.get("line_channel_access_token") or "").strip()
+        if token:
+            sent = await send_line_message(token, user.line_id, WELCOME_MESSAGE)
+    elif channel == "telegram" and user.telegram_id:
+        token = (by_key.get("telegram_bot_token") or "").strip()
+        if token:
+            sent = await send_telegram_message(token, user.telegram_id, WELCOME_MESSAGE)
+    if sent:
+        user.welcome_sent_at = datetime.utcnow()
+        db.add(user)
 
 LINE_AUTH_URL = "https://access.line.me/oauth2/v2.1/authorize"
 LINE_TOKEN_URL = "https://api.line.me/oauth2/v2.1/token"
@@ -205,6 +225,7 @@ async def line_callback(
         raise HTTPException(status_code=400, detail="No LINE user ID")
     result = await db.execute(select(User).where(User.line_id == line_id))
     user = result.scalar_one_or_none()
+    is_new = user is None
     if user:
         if display_name:
             user.display_name = display_name
@@ -218,6 +239,8 @@ async def line_callback(
         db.add(user)
     await db.flush()
     await db.refresh(user)
+    if is_new:
+        await _send_welcome_if_configured(db, user, "line")
     if user.banned:
         raise HTTPException(status_code=403, detail="Account is banned")
     token = create_user_access_token(user.id, "line")
@@ -304,6 +327,7 @@ async def telegram_verify(
     display_name = f"{first_name} {last_name}".strip() or username or "User"
     result = await db.execute(select(User).where(User.telegram_id == telegram_id))
     user = result.scalar_one_or_none()
+    is_new = user is None
     if user:
         user.display_name = display_name
         if photo_url:
@@ -314,6 +338,8 @@ async def telegram_verify(
         db.add(user)
     await db.flush()
     await db.refresh(user)
+    if is_new:
+        await _send_welcome_if_configured(db, user, "telegram")
     if user.banned:
         raise HTTPException(status_code=403, detail="Account is banned")
     token = create_user_access_token(user.id, "telegram")

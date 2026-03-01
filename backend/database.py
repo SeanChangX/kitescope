@@ -64,9 +64,21 @@ def _add_source_origin_url(conn):
         conn.execute(text("ALTER TABLE sources ADD COLUMN origin_url VARCHAR(2048)"))
 
 
+def _add_user_welcome_sent_at(conn):
+    """Add users.welcome_sent_at if missing."""
+    result = conn.execute(text("PRAGMA table_info(users)"))
+    rows = result.fetchall()
+    if not rows:
+        return
+    names = [r[1] for r in rows]
+    if "welcome_sent_at" not in names:
+        conn.execute(text("ALTER TABLE users ADD COLUMN welcome_sent_at DATETIME"))
+
+
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(_add_notification_columns)
         await conn.run_sync(_add_source_direct_embed)
         await conn.run_sync(_add_source_origin_url)
+        await conn.run_sync(_add_user_welcome_sent_at)

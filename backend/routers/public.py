@@ -19,6 +19,13 @@ from auth_admin import get_current_user
 router = APIRouter()
 
 
+def _utc_iso(dt: datetime | None) -> str:
+    """Return ISO string with Z suffix so frontend parses as UTC and displays in local time."""
+    if dt is None:
+        return ""
+    return dt.isoformat() + "Z" if dt.tzinfo is None else dt.isoformat()
+
+
 class SuggestSourceBody(BaseModel):
     url: str
     location: str = ""
@@ -146,7 +153,7 @@ async def get_history(
     q = q.order_by(CountHistory.recorded_at.asc())
     result = await db.execute(q)
     rows = result.scalars().all()
-    return [{"source_id": r.source_id, "count": r.count, "recorded_at": r.recorded_at.isoformat()} for r in rows]
+    return [{"source_id": r.source_id, "count": r.count, "recorded_at": _utc_iso(r.recorded_at)} for r in rows]
 
 
 @router.get("/counts")
@@ -159,7 +166,7 @@ async def current_counts(db: AsyncSession = Depends(get_db)):
     by_source = {}
     for r in rows:
         if r.source_id not in by_source:
-            by_source[r.source_id] = {"count": r.count, "recorded_at": r.recorded_at.isoformat()}
+            by_source[r.source_id] = {"count": r.count, "recorded_at": _utc_iso(r.recorded_at)}
     return by_source
 
 

@@ -50,6 +50,7 @@ class User(Base):
     banned: Mapped[bool] = mapped_column(Boolean, default=False)
     last_seen: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_ip: Mapped[str] = mapped_column(String(64), default="")
+    welcome_sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

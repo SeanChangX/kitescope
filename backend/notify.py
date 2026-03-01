@@ -3,6 +3,13 @@ import httpx
 
 LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push"
 
+WELCOME_MESSAGE = (
+    "Welcome to KiteScope.\n"
+    "Subscribe to streams to get notified when the kite count reaches your threshold. "
+    "Use the Notifications page to add subscriptions.\n"
+    "GitHub: https://github.com/SeanChangX/KiteScope"
+)
+
 DEFAULT_NOTIFY_FORMAT = (
     "[ Spotted {count} kites ] [ {place} ]\n"
     "Weather: {weather}\n"
