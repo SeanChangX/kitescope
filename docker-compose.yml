@@ -36,6 +36,7 @@ services:
       - DATABASE_URL=sqlite:////app/data/kitescope.db
       - INTERNAL_SECRET_FILE=/app/data/internal_secret
       - VISION_URL=http://vision:9000
+      - VISION_PREVIEW_CONCURRENCY=${VISION_PREVIEW_CONCURRENCY:-4}
       - MODELS_DIR=/app/models
       - GO2RTC_BASE_URL=http://go2rtc:1984
     env_file:

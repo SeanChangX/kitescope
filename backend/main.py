@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from database import init_db, AsyncSessionLocal
 from routers import public, admin, auth, internal, user_notifications
+from routers.public import close_vision_client
 from notification_worker import start_worker
 from auth_admin import set_secret_key
 from secret_config import (
@@ -35,6 +36,7 @@ async def lifespan(app: FastAPI):
         )
     task = start_worker()
     yield
+    await close_vision_client()
     if task is not None and not task.done():
         task.cancel()
 

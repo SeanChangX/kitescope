@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from fastapi import APIRouter, Depends, Query, HTTPException
@@ -9,6 +10,31 @@ from pydantic import BaseModel
 import httpx
 
 log = logging.getLogger(__name__)
+
+# Shared vision HTTP client (connection pool) to avoid opening a new connection per preview request.
+# When many cards poll at once, reusing connections prevents vision overload and ReadTimeout.
+_vision_client: httpx.AsyncClient | None = None
+_vision_client_lock = asyncio.Lock()
+# Max concurrent snapshot requests to vision. Higher = less queue delay for many cards; too high can overload vision.
+_VISION_PREVIEW_CONCURRENCY = max(1, min(10, int(os.getenv("VISION_PREVIEW_CONCURRENCY", "4"))))
+_preview_semaphore = asyncio.Semaphore(_VISION_PREVIEW_CONCURRENCY)
+
+
+async def get_vision_client() -> httpx.AsyncClient:
+    global _vision_client
+    async with _vision_client_lock:
+        if _vision_client is None:
+            limits = httpx.Limits(max_keepalive_connections=4, max_connections=8, keepalive_expiry=30.0)
+            _vision_client = httpx.AsyncClient(timeout=45.0, limits=limits)
+        return _vision_client
+
+
+async def close_vision_client() -> None:
+    global _vision_client
+    async with _vision_client_lock:
+        if _vision_client is not None:
+            await _vision_client.aclose()
+            _vision_client = None
 
 from datetime import timedelta
 from database import get_db, AsyncSessionLocal
@@ -110,20 +136,20 @@ async def source_preview(
         overlay = False
     vision_url = os.getenv("VISION_URL", "http://vision:9000")
     try:
-        # Vision fetches NVR + runs detection; allow up to 45s (slow cameras / first-frame)
-        async with httpx.AsyncClient(timeout=45.0) as client:
+        client = await get_vision_client()
+        async with _preview_semaphore:
             r = await client.get(
                 f"{vision_url}/snapshot",
                 params={"url": row.url, "overlay": overlay, "t": t},
             )
-            if r.status_code != 200:
-                body_preview = (r.text or (r.content.decode("utf-8", errors="replace") if r.content else ""))[:200]
-                log.warning("preview source_id=%s vision_status=%s body=%s", source_id, r.status_code, body_preview)
-                raise HTTPException(status_code=502, detail="Vision snapshot failed")
-            headers = {"Cache-Control": "no-store, no-cache, must-revalidate"}
-            if "X-Detection-Count" in r.headers:
-                headers["X-Detection-Count"] = r.headers["X-Detection-Count"]
-            return Response(content=r.content, media_type="image/jpeg", headers=headers)
+        if r.status_code != 200:
+            body_preview = (r.text or (r.content.decode("utf-8", errors="replace") if r.content else ""))[:200]
+            log.warning("preview source_id=%s vision_status=%s body=%s", source_id, r.status_code, body_preview)
+            raise HTTPException(status_code=502, detail="Vision snapshot failed")
+        headers = {"Cache-Control": "no-store, no-cache, must-revalidate"}
+        if "X-Detection-Count" in r.headers:
+            headers["X-Detection-Count"] = r.headers["X-Detection-Count"]
+        return Response(content=r.content, media_type="image/jpeg", headers=headers)
     except httpx.RequestError as e:
         log.warning(
             "preview source_id=%s vision unreachable: %s %s",
