@@ -83,9 +83,6 @@ def _migrate_users_autoincrement(conn):
     result = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='users'"))
     if not result.fetchone():
         return
-    result = conn.execute(text("SELECT name FROM sqlite_sequence WHERE name='users'"))
-    if result.fetchone():
-        return
     result = conn.execute(text("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'"))
     row = result.fetchone()
     if not row:
