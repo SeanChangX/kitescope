@@ -1,5 +1,6 @@
 import { Routes, Route } from "react-router-dom";
 import GuestView from "./pages/GuestView";
+import UserLayout from "./pages/UserLayout";
 import AdminLayout from "./pages/admin/AdminLayout";
 import LoginPage from "./pages/LoginPage";
 import AuthCallback from "./pages/AuthCallback";
@@ -14,9 +15,11 @@ function App() {
   return (
     <>
       <Routes>
-        <Route path="/" element={<GuestView />} />
+        <Route path="/" element={<UserLayout />}>
+          <Route index element={<GuestView />} />
+          <Route path="notifications" element={<NotificationSettings />} />
+        </Route>
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/notifications" element={<NotificationSettings />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/auth/telegram-callback" element={<AuthTelegramCallback />} />
         <Route path="/admin/*" element={<AdminLayout />} />

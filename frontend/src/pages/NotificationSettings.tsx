@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { userFetch } from "../lib/auth";
 import { useI18n } from "../lib/i18n";
-import AppHeader from "../components/AppHeader";
 
 const API = "/api";
 
@@ -108,9 +107,8 @@ export default function NotificationSettings() {
 
   if (unauth) {
     return (
-      <div className="min-h-screen bg-bg-primary px-4 py-12">
-        <AppHeader />
-        <div className="mx-auto max-w-2xl ks-card">
+      <div className="mx-auto max-w-2xl px-4 py-12">
+        <div className="ks-card">
           <p className="text-text-secondary">{t("notifications.loginRequired")}</p>
           <Link to="/login" className="mt-2 inline-block text-primary hover:underline">
             {t("notifications.signIn")}
@@ -124,18 +122,11 @@ export default function NotificationSettings() {
   }
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-bg-primary">
-        <AppHeader />
-        <p className="p-8 text-text-muted">{t("common.loading")}</p>
-      </div>
-    );
+    return <p className="p-8 text-text-muted">{t("common.loading")}</p>;
   }
 
   return (
-    <div className="min-h-screen bg-bg-primary">
-      <AppHeader />
-      <main className="mx-auto max-w-2xl px-4 py-8 sm:max-w-7xl sm:px-6">
+    <main className="mx-auto max-w-2xl px-4 py-8 sm:max-w-7xl sm:px-6">
         <h1 className="font-gaming mb-6 text-2xl font-bold text-text-primary sm:text-3xl">
           {t("notifications.title")}
         </h1>
@@ -244,7 +235,6 @@ export default function NotificationSettings() {
             </ul>
           )}
         </div>
-      </main>
-    </div>
+    </main>
   );
 }

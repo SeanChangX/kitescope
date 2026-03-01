@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import SuggestForm from "./SuggestForm";
 import SourceCard from "../components/SourceCard";
-import AppHeader from "../components/AppHeader";
 import { useI18n } from "../lib/i18n";
 
 const API = "/api";
@@ -79,10 +78,7 @@ export default function GuestView() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-bg-primary">
-      <AppHeader />
-
-      <main className="mx-auto max-w-7xl px-6 py-10 sm:py-12">
+    <main className="mx-auto max-w-7xl px-6 py-10 sm:py-12">
         <section className="mb-2">
           <h1 className="font-gaming text-2xl sm:text-3xl font-bold text-text-primary">
             {t("home.title")}
@@ -135,7 +131,6 @@ export default function GuestView() {
           </p>
           <SuggestForm onSuccess={refreshSources} />
         </section>
-      </main>
-    </div>
+    </main>
   );
 }
