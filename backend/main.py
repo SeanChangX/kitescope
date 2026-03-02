@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import init_db, AsyncSessionLocal
-from routers import public, admin, auth, internal, user_notifications, line_webhook
+from routers import public, admin, auth, internal, user_notifications
 from routers.public import close_vision_client
 from notification_worker import start_worker
 from auth_admin import set_secret_key
@@ -91,7 +91,6 @@ app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(user_notifications.router, prefix="/api", tags=["user"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 app.include_router(internal.router, prefix="/api/internal", tags=["internal"])
-app.include_router(line_webhook.router, prefix="/api/webhooks", tags=["webhooks"])
 
 
 @app.get("/")

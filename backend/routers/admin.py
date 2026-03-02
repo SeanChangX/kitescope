@@ -2,7 +2,7 @@ import os
 import re
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete, func, or_
+from sqlalchemy import select, delete, update, func, or_
 from pydantic import BaseModel
 
 from datetime import datetime
@@ -335,6 +335,7 @@ async def delete_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     await db.execute(delete(NotificationSubscription).where(NotificationSubscription.user_id == user_id))
+    await db.execute(update(PendingSource).where(PendingSource.user_id == user_id).values(user_id=None))
     await db.delete(user)
     await db.flush()
     return {"message": "User deleted"}
