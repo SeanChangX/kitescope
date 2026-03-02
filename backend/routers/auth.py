@@ -159,6 +159,37 @@ async def line_login_url(
     return {"url": url, "state": state}
 
 
+LINE_BOT_INFO_URL = "https://api.line.me/v2/bot/info"
+
+
+@router.get("/line/add-friend-url")
+async def line_add_friend_url(db: AsyncSession = Depends(get_db)):
+    """
+    Return the LINE Official Account add-friend URL so the frontend can prompt users
+    to add the bot before receiving notifications or welcome message.
+    Uses LINE Get bot info API (basicId). Returns {"url": "https://line.me/R/ti/p/@xxx"} or {"url": ""}.
+    """
+    result = await db.execute(select(BotConfig).where(BotConfig.key == "line_channel_access_token"))
+    row = result.scalar_one_or_none()
+    if not row or not (row.value or "").strip():
+        return {"url": ""}
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(
+                LINE_BOT_INFO_URL,
+                headers={"Authorization": f"Bearer {row.value.strip()}"},
+            )
+            if r.status_code != 200:
+                return {"url": ""}
+            data = r.json()
+            basic_id = (data.get("basicId") or "").strip()
+            if not basic_id:
+                return {"url": ""}
+            return {"url": f"https://line.me/R/ti/p/{basic_id}"}
+    except Exception:
+        return {"url": ""}
+
+
 class LineCallbackBody(BaseModel):
     code: str
     redirect_uri: str

@@ -76,6 +76,8 @@ const messages: Record<Locale, Record<string, string>> = {
     "notifications.channelTelegram": "Telegram",
     "notifications.test": "Send test notification",
     "notifications.testSent": "Test notification sent. Check your LINE or Telegram.",
+    "notifications.lineAddFriendHint": "To receive LINE notifications and welcome message, add our LINE bot as a friend:",
+    "notifications.lineAddFriend": "Add LINE bot",
     "notifications.testFailed": "Failed to send test.",
     "notifications.sendingTest": "Sending...",
     "admin.dashboard": "Dashboard",
@@ -198,6 +200,7 @@ const messages: Record<Locale, Record<string, string>> = {
     "common.loading": "Loading...",
     "card.loadingPreview": "Loading...",
     "aria.github": "GitHub repository",
+    "aria.buyMeACoffee": "Buy Me a Coffee",
   },
   "zh-TW": {
     "app.name": "KiteScope",
@@ -270,6 +273,8 @@ const messages: Record<Locale, Record<string, string>> = {
     "notifications.channelTelegram": "Telegram",
     "notifications.test": "發送測試通知",
     "notifications.testSent": "已發送測試通知，請至 LINE 或 Telegram 查看。",
+    "notifications.lineAddFriendHint": "要收到 LINE 通知與歡迎訊息，請先將我們的 LINE 官方帳號加為好友：",
+    "notifications.lineAddFriend": "加 LINE 好友",
     "notifications.testFailed": "發送測試失敗。",
     "notifications.sendingTest": "發送中…",
     "admin.dashboard": "儀表板",
@@ -392,6 +397,7 @@ const messages: Record<Locale, Record<string, string>> = {
     "common.loading": "載入中…",
     "card.loadingPreview": "載入中…",
     "aria.github": "GitHub 儲存庫",
+    "aria.buyMeACoffee": "Buy Me a Coffee",
   },
 };
 

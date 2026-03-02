@@ -41,6 +41,7 @@ export default function NotificationSettings() {
   const [newCooldown, setNewCooldown] = useState(30);
   const [adding, setAdding] = useState(false);
   const [message, setMessage] = useState("");
+  const [lineAddFriendUrl, setLineAddFriendUrl] = useState("");
 
   function load() {
     setLoading(true);
@@ -48,14 +49,23 @@ export default function NotificationSettings() {
     Promise.all([
       userFetch(`${API}/notifications/subscriptions`),
       fetch(`${API}/sources`),
+      userFetch(`${API}/auth/me`),
+      fetch(`${API}/auth/line/add-friend-url`),
     ])
-      .then(([rSubs, rSources]) => {
+      .then(([rSubs, rSources, rMe, rLineUrl]) => {
         if (rSubs.status === 401) {
           setUnauth(true);
           return;
         }
         if (rSubs.ok) rSubs.json().then(setSubs).catch(() => setSubs([]));
         if (rSources.ok) rSources.json().then(setSources).catch(() => setSources([]));
+        if (rMe?.ok && rLineUrl?.ok) {
+          Promise.all([rMe.json(), rLineUrl.json()]).then(
+            ([me, lineUrl]: [{ line_id?: boolean }, { url?: string }]) => {
+              if (me.line_id && lineUrl.url) setLineAddFriendUrl(lineUrl.url);
+            }
+          ).catch(() => {});
+        }
       })
       .catch(() => setSubs([]))
       .finally(() => setLoading(false));
@@ -131,6 +141,20 @@ export default function NotificationSettings() {
           {t("notifications.title")}
         </h1>
         <p className="mb-6 text-sm text-text-secondary">{t("notifications.description")}</p>
+
+        {lineAddFriendUrl && (
+          <div className="mb-6 rounded-lg border border-border bg-bg-secondary/50 px-4 py-3 text-sm text-text-secondary">
+            <p className="mb-2">{t("notifications.lineAddFriendHint")}</p>
+            <a
+              href={lineAddFriendUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block rounded-md border border-primary bg-primary/10 px-3 py-1.5 font-medium text-primary hover:bg-primary/20"
+            >
+              {t("notifications.lineAddFriend")}
+            </a>
+          </div>
+        )}
 
         <form onSubmit={addSub} className="ks-card mb-8">
           <h2 className="font-gaming mb-3 font-medium text-text-primary">

@@ -46,8 +46,8 @@ def _get_session():
         return _session
     if not MODEL_PATH or not os.path.isfile(MODEL_PATH):
         if not _session_logged:
-            log.warning(
-                "Detection disabled: model file not found at MODEL_PATH=%s. Put kite_nano.onnx there (e.g. docker cp kite_nano.onnx <vision_container>:/app/models/).",
+            log.debug(
+                "Detection disabled: model file not found at MODEL_PATH=%s. Upload model to enable.",
                 MODEL_PATH,
             )
             _session_logged = True
