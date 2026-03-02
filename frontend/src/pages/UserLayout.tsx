@@ -3,9 +3,11 @@ import AppHeader from "../components/AppHeader";
 
 export default function UserLayout() {
   return (
-    <div className="min-h-screen bg-bg-primary">
+    <div className="flex h-screen flex-col bg-bg-primary">
       <AppHeader />
-      <Outlet />
+      <main className="min-h-0 flex-1 overflow-y-auto">
+        <Outlet />
+      </main>
     </div>
   );
 }

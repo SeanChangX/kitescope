@@ -69,6 +69,8 @@ app.add_middleware(SecurityHeadersMiddleware)
 # Unset => allow_origins=["*"] for backward compatibility.
 _cors_origins_raw = os.getenv("CORS_ORIGINS") or os.getenv("PUBLIC_APP_URL") or ""
 _cors_origins = [s.strip().rstrip("/") for s in _cors_origins_raw.split(",") if s.strip()]
+# Expose X-Detection-Count so frontend can read it from preview responses (CORS).
+_cors_expose_headers = ["X-Detection-Count"]
 if _cors_origins:
     app.add_middleware(
         CORSMiddleware,
@@ -76,6 +78,7 @@ if _cors_origins:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=_cors_expose_headers,
     )
 else:
     app.add_middleware(
@@ -84,6 +87,7 @@ else:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=_cors_expose_headers,
     )
 
 app.include_router(public.router, prefix="/api", tags=["public"])
