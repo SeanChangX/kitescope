@@ -17,8 +17,27 @@ _fail_log_interval_sec = 300
 log = logging.getLogger("vision.app")
 
 
+def _apply_saved_model_selection() -> None:
+    """On startup, apply model selection from MODELS_DIR/.selected (written by backend on save)."""
+    import os
+    from vision.detector import MODELS_DIR, reload_model
+    if not MODELS_DIR:
+        return
+    path = os.path.join(MODELS_DIR, ".selected")
+    if not os.path.isfile(path):
+        return
+    try:
+        with open(path) as f:
+            name = (f.read() or "").strip()
+        if name and reload_model(name):
+            log.info("Applied saved model selection: %s", name)
+    except OSError:
+        pass
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _apply_saved_model_selection()
     task = asyncio.create_task(ingestion_loop())
     yield
     task.cancel()

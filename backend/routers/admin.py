@@ -442,6 +442,7 @@ async def put_notify_format(
 
 # Detection model upload/select/delete; shared with vision via MODELS_DIR (e.g. volume mount)
 MODELS_DIR = os.getenv("MODELS_DIR", "data/models")
+SELECTED_MODEL_FILE = ".selected"  # Filename under MODELS_DIR; vision reads this on startup
 VISION_SELECTED_MODEL_KEY = "vision_selected_model"
 VISION_CONFIDENCE_THRESHOLD_KEY = "vision_confidence_threshold"
 
@@ -480,6 +481,21 @@ async def get_models(
     selected = (by_key.get(VISION_SELECTED_MODEL_KEY) or "").strip() or None
     if selected and selected not in models:
         selected = None
+    # Sync DB selection to .selected file so vision applies it on restart (e.g. after backup restore)
+    selected_file_path = os.path.join(MODELS_DIR, SELECTED_MODEL_FILE)
+    if selected:
+        try:
+            with open(selected_file_path) as f:
+                current = (f.read() or "").strip()
+            if current != selected:
+                with open(selected_file_path, "w") as f:
+                    f.write(selected)
+        except OSError:
+            try:
+                with open(selected_file_path, "w") as f:
+                    f.write(selected)
+            except OSError:
+                pass
     try:
         confidence_threshold = float(by_key.get(VISION_CONFIDENCE_THRESHOLD_KEY) or "0.5")
     except (TypeError, ValueError):
@@ -573,6 +589,14 @@ async def put_model_selected(
     await db.flush()
     vision_url = os.getenv("VISION_URL", "http://vision:9000").rstrip("/")
     secret = get_internal_secret()
+    # Persist selection to a file so vision applies it on restart (vision does not read DB)
+    _models_dir_ensure()
+    selected_file_path = os.path.join(MODELS_DIR, SELECTED_MODEL_FILE)
+    try:
+        with open(selected_file_path, "w") as f:
+            f.write(selected or "")
+    except OSError:
+        pass  # Best-effort; vision may still get selection via reload-model below
     if selected:
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
