@@ -6,6 +6,9 @@ import cv2
 import numpy as np
 from .base import BaseAdapter, FrameResult
 
+# Total timeout for one frame (yt-dlp + ffmpeg). Prevents one bad URL from holding snapshot semaphore forever.
+YT_FETCH_TIMEOUT_SEC = 35
+
 
 class _YtdlpSilentLogger:
     """Suppress yt-dlp stderr/log (e.g. 'Sign in to confirm you're not a bot') when server has no cookies."""
@@ -69,10 +72,16 @@ def _ffmpeg_one_frame(stream_url: str, seek_sec: float = 0) -> np.ndarray | None
 
 
 async def fetch_frame_async(url: str, seek_sec: float = 0) -> np.ndarray | None:
-    stream_url = await asyncio.to_thread(_get_stream_url, url)
-    if not stream_url:
+    async def _run() -> np.ndarray | None:
+        stream_url = await asyncio.to_thread(_get_stream_url, url)
+        if not stream_url:
+            return None
+        return await asyncio.to_thread(_ffmpeg_one_frame, stream_url, seek_sec)
+
+    try:
+        return await asyncio.wait_for(_run(), timeout=YT_FETCH_TIMEOUT_SEC)
+    except asyncio.TimeoutError:
         return None
-    return await asyncio.to_thread(_ffmpeg_one_frame, stream_url, seek_sec)
 
 
 class YoutubeLiveAdapter(BaseAdapter):
