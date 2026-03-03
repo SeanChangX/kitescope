@@ -27,12 +27,15 @@ INTERNAL_SECRET = _get_internal_secret()
 INTERVAL_SEC = int(os.getenv("VISION_LOOP_INTERVAL_SEC", "30"))
 SKIP_FRAMES = int(os.getenv("SKIP_FRAMES", "3"))
 EMA_ALPHA = float(os.getenv("EMA_ALPHA", "0.3"))
+# Max concurrent sources in one cycle (fetch + detect per source in parallel).
+INGESTION_CONCURRENCY = max(1, min(16, int(os.getenv("VISION_INGESTION_CONCURRENCY", "6"))))
 
 _headers = {}
 if INTERNAL_SECRET:
     _headers["X-Internal-Secret"] = INTERNAL_SECRET
 
 _ema: dict[int, float] = {}
+_ingestion_semaphore = asyncio.Semaphore(INGESTION_CONCURRENCY)
 
 
 def _apply_ema(source_id: int, raw_count: float) -> float:
@@ -45,6 +48,33 @@ def _apply_ema(source_id: int, raw_count: float) -> float:
     return ema
 
 
+async def _process_one_source(s: dict, client: httpx.AsyncClient) -> None:
+    """Fetch one frame, detect, POST count. Runs under _ingestion_semaphore."""
+    sid = s["id"]
+    url = s["url"]
+    stype = detect_source_type(url)
+    interval = s.get("pull_interval_sec", 5)
+    async with _ingestion_semaphore:
+        try:
+            adapter_cls = get_adapter(stype)
+            adapter = adapter_cls(url=url, source_id=str(sid), interval_sec=interval)
+            try:
+                frame_result = await adapter.fetch_frame()
+                if frame_result is None:
+                    return
+                raw_count, _boxes = detect(frame_result.frame)
+                count = _apply_ema(sid, float(raw_count))
+                await client.post(
+                    f"{BACKEND_URL}/api/internal/counts",
+                    json={"source_id": sid, "count": count},
+                    headers=_headers,
+                )
+            finally:
+                adapter.close()
+        except Exception:
+            pass
+
+
 async def run_once():
     async with httpx.AsyncClient(timeout=15.0) as client:
         try:
@@ -54,31 +84,7 @@ async def run_once():
             sources = r.json()
         except Exception:
             return
-    for s in sources:
-        sid = s["id"]
-        url = s["url"]
-        # Use URL to choose adapter so NVR/zms streams use MjpegAdapter even if stored type is http_snapshot
-        stype = detect_source_type(url)
-        interval = s.get("pull_interval_sec", 5)
-        try:
-            adapter_cls = get_adapter(stype)
-            adapter = adapter_cls(url=url, source_id=str(sid), interval_sec=interval)
-            try:
-                frame_result = await adapter.fetch_frame()
-                if frame_result is None:
-                    continue
-                raw_count, _boxes = detect(frame_result.frame)
-                count = _apply_ema(sid, float(raw_count))
-                async with httpx.AsyncClient(timeout=5.0) as client:
-                    await client.post(
-                        f"{BACKEND_URL}/api/internal/counts",
-                        json={"source_id": sid, "count": count},
-                        headers=_headers,
-                    )
-            finally:
-                adapter.close()
-        except Exception:
-            continue
+    await asyncio.gather(*[_process_one_source(s, client) for s in sources])
 
 
 async def loop():

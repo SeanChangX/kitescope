@@ -59,12 +59,14 @@ async def health():
 @app.get("/config")
 async def config():
     from vision.detector import _get_session, MODEL_PATH, CONFIDENCE_THRESHOLD
+    from vision.ingestion_loop import INGESTION_CONCURRENCY
     return {
         "model_path": MODEL_PATH,
         "model_loaded": _get_session() is not None,
         "model_exists": os.path.isfile(MODEL_PATH) if MODEL_PATH else False,
         "confidence_threshold": CONFIDENCE_THRESHOLD,
         "skip_frames": int(os.getenv("SKIP_FRAMES", "3")),
+        "ingestion_concurrency": INGESTION_CONCURRENCY,
     }
 
 

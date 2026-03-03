@@ -103,7 +103,7 @@ export function isDirectEmbeddableUrl(url: string | undefined): boolean {
 }
 
 /** Delay between starting each card's preview request (ms). From env VITE_PREVIEW_STAGGER_MS (e.g. in docker-compose). */
-const PREVIEW_STAGGER_MS = Number(import.meta.env.VITE_PREVIEW_STAGGER_MS) || 500;
+const PREVIEW_STAGGER_MS = Number(import.meta.env.VITE_PREVIEW_STAGGER_MS) || 300;
 
 type Props = { source: Source; count: Count; previewTick: number; staggerIndex?: number };
 
