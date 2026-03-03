@@ -17,7 +17,7 @@ services:
       - VITE_API_URL=http://localhost:8000
       - VITE_PROXY_TARGET=http://backend:8000
       # Dashboard refresh (ms). Same role as VISION_LOOP_INTERVAL_SEC for vision.
-      - VITE_PREVIEW_INTERVAL_MS=${VITE_PREVIEW_INTERVAL_MS:-2000}
+      - VITE_PREVIEW_INTERVAL_MS=${VITE_PREVIEW_INTERVAL_MS:-5000}
       - VITE_PREVIEW_STAGGER_MS=${VITE_PREVIEW_STAGGER_MS:-500}
     command: npm run dev -- --host
 

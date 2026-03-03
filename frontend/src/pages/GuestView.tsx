@@ -6,7 +6,7 @@ import { useI18n } from "../lib/i18n";
 const API = "/api";
 
 /** Refresh interval for both preview images and counts (same tick so they update together). */
-const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_PREVIEW_INTERVAL_MS) || 2000;
+const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_PREVIEW_INTERVAL_MS) || 5000;
 
 const COORDS_REGEX = /^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/;
 

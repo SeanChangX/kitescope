@@ -7,7 +7,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        - VITE_PREVIEW_INTERVAL_MS=${VITE_PREVIEW_INTERVAL_MS:-2000}
+        - VITE_PREVIEW_INTERVAL_MS=${VITE_PREVIEW_INTERVAL_MS:-5000}
         - VITE_PREVIEW_STAGGER_MS=${VITE_PREVIEW_STAGGER_MS:-}
     image: seanchangx/kitescope-frontend:latest
     container_name: kitescope-frontend
