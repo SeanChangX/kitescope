@@ -32,8 +32,19 @@ def cookie_params() -> dict:
         "max_age": COOKIE_MAX_AGE,
         "samesite": "lax",
         "secure": COOKIE_SECURE,
-    "path": "/",
-}
+        "path": "/",
+    }
+
+
+def clear_cookie_params() -> dict:
+    """Params to clear cookie (max_age=0, same path/secure/samesite as set)."""
+    return {
+        "httponly": True,
+        "max_age": 0,
+        "samesite": "lax",
+        "secure": COOKIE_SECURE,
+        "path": "/",
+    }
 
 
 def _bearer_from_request(request: Request) -> str | None:

@@ -29,6 +29,7 @@ from auth_admin import (
     ADMIN_COOKIE,
     USER_COOKIE,
     cookie_params,
+    clear_cookie_params,
 )
 from rate_limit import rate_limit_admin_auth
 from notify import send_line_message, send_telegram_message, WELCOME_MESSAGE_TEMPLATE
@@ -383,9 +384,9 @@ async def telegram_verify(
 
 @router.post("/logout")
 async def user_logout():
-    """Clear user JWT cookie (HttpOnly)."""
+    """Clear user JWT cookie (HttpOnly). Set expired cookie so browser clears it (same path/secure/samesite)."""
     res = JSONResponse(content={"message": "ok"})
-    res.delete_cookie(USER_COOKIE, path="/")
+    res.set_cookie(key=USER_COOKIE, value="", **clear_cookie_params())
     return res
 
 
@@ -470,9 +471,9 @@ async def admin_login(
 
 @router.post("/admin/logout")
 async def admin_logout():
-    """Clear admin JWT cookie (HttpOnly)."""
+    """Clear admin JWT cookie (HttpOnly). Set expired cookie so browser clears it (same path/secure/samesite)."""
     res = JSONResponse(content={"message": "ok"})
-    res.delete_cookie(ADMIN_COOKIE, path="/")
+    res.set_cookie(key=ADMIN_COOKIE, value="", **clear_cookie_params())
     return res
 
 

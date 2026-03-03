@@ -33,6 +33,7 @@ async def _run_once() -> None:
             .join(Source, NotificationSubscription.source_id == Source.id)
             .where(NotificationSubscription.enabled == True)
             .where(User.banned == False)
+            .where(Source.direct_embed == False)
         )
         subs_rows = subs_result.all()
 

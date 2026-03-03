@@ -29,11 +29,13 @@ class _YtdlpSilentLogger:
 def _get_stream_url(url: str) -> str | None:
     try:
         import yt_dlp
+        # Prefer 1080p or lower to reduce decode CPU vs 4K (detection resizes to 640 anyway).
         opts = {
             "quiet": True,
             "no_warnings": True,
             "extract_flat": False,
             "logger": _YtdlpSilentLogger(),
+            "format": "bestvideo[height<=1080][vcodec!=none]/best[height<=1080]/best",
         }
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)

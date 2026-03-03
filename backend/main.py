@@ -1,3 +1,4 @@
+import asyncio
 import os
 from contextlib import asynccontextmanager
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -6,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from database import init_db, AsyncSessionLocal
 from routers import public, admin, auth, internal, user_notifications
-from routers.public import close_vision_client
+from routers.public import close_vision_client, warm_preview_cache
 from notification_worker import start_worker
 from auth_admin import set_secret_key
 from secret_config import (
@@ -35,6 +36,15 @@ async def lifespan(app: FastAPI):
             "INTERNAL_SECRET_FILE is set but secret could not be read. Fix file path or set INTERNAL_SECRET."
         )
     task = start_worker()
+
+    async def _warm_preview_after_startup() -> None:
+        await asyncio.sleep(5)
+        try:
+            await warm_preview_cache()
+        except Exception:
+            pass
+
+    asyncio.create_task(_warm_preview_after_startup())
     yield
     await close_vision_client()
     if task is not None and not task.done():

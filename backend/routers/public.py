@@ -41,7 +41,7 @@ async def close_vision_client() -> None:
 # of each hitting vision independently.  With 30 users x 4 sources every 5 s =
 # 120 req/5s, this reduces actual vision calls to 4 per TTL window.
 
-_PREVIEW_CACHE_TTL = float(os.getenv("PREVIEW_CACHE_TTL", "2.0"))
+_PREVIEW_CACHE_TTL = float(os.getenv("PREVIEW_CACHE_TTL", "3.0"))
 
 # (source_id, overlay_bool) -> (jpeg_bytes, detection_count_header|None, monotonic_timestamp)
 _preview_cache: dict[tuple[int, bool], tuple[bytes, str | None, float]] = {}
@@ -202,6 +202,37 @@ async def source_preview(
                 source_id, type(e).__name__, str(e) or repr(e),
             )
             raise HTTPException(status_code=502, detail="Vision service unavailable")
+
+
+async def warm_preview_cache() -> None:
+    """Pre-populate preview cache for all enabled non-direct_embed sources so first user gets fast previews."""
+    vision_url = os.getenv("VISION_URL", "http://vision:9000")
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(select(Source).where(Source.enabled == True))
+        rows = result.scalars().all()
+    for row in rows:
+        if getattr(row, "direct_embed", False):
+            continue
+        cache_key = (row.id, True)
+        if (row.type or "").strip().lower() == "go2rtc" and getattr(row, "origin_url", None):
+            try:
+                from go2rtc_client import ensure_go2rtc_stream
+                await ensure_go2rtc_stream(row.origin_url, row.id)
+            except Exception:
+                pass
+        try:
+            client = await get_vision_client()
+            async with _preview_semaphore:
+                r = await client.get(
+                    f"{vision_url}/snapshot",
+                    params={"url": row.url, "overlay": True, "t": "0"},
+                )
+            if r.status_code == 200 and r.content:
+                detection_count = r.headers.get("X-Detection-Count")
+                _preview_cache[cache_key] = (r.content, detection_count, time.monotonic())
+        except Exception:
+            pass
+        await asyncio.sleep(1)
 
 
 @router.get("/history")

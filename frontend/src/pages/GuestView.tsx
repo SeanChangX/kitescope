@@ -5,8 +5,8 @@ import { useI18n } from "../lib/i18n";
 
 const API = "/api";
 
-const PREVIEW_INTERVAL_MS = Number(import.meta.env.VITE_PREVIEW_INTERVAL_MS) || 5000;
-const COUNTS_INTERVAL_MS = Number(import.meta.env.VITE_COUNTS_INTERVAL_MS) || 3000;
+/** Refresh interval for both preview images and counts (same tick so they update together). */
+const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_PREVIEW_INTERVAL_MS) || 2000;
 
 const COORDS_REGEX = /^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/;
 
@@ -64,16 +64,12 @@ export default function GuestView() {
 
   useEffect(() => {
     const t = setInterval(() => {
+      setPreviewTick((n) => n + 1);
       fetch(`${API}/counts`)
         .then((r) => r.json())
         .then(setCounts)
         .catch(console.error);
-    }, COUNTS_INTERVAL_MS);
-    return () => clearInterval(t);
-  }, []);
-
-  useEffect(() => {
-    const t = setInterval(() => setPreviewTick((n) => n + 1), PREVIEW_INTERVAL_MS);
+    }, REFRESH_INTERVAL_MS);
     return () => clearInterval(t);
   }, []);
 

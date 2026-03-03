@@ -7,8 +7,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        - VITE_PREVIEW_INTERVAL_MS=${VITE_PREVIEW_INTERVAL_MS:-}
-        - VITE_COUNTS_INTERVAL_MS=${VITE_COUNTS_INTERVAL_MS:-}
+        - VITE_PREVIEW_INTERVAL_MS=${VITE_PREVIEW_INTERVAL_MS:-2000}
         - VITE_PREVIEW_STAGGER_MS=${VITE_PREVIEW_STAGGER_MS:-}
     image: seanchangx/kitescope-frontend:latest
     container_name: kitescope-frontend
@@ -37,7 +36,7 @@ services:
       - INTERNAL_SECRET_FILE=/app/data/internal_secret
       - VISION_URL=http://vision:9000
       - VISION_PREVIEW_CONCURRENCY=${VISION_PREVIEW_CONCURRENCY:-8}
-      - PREVIEW_CACHE_TTL=${PREVIEW_CACHE_TTL:-2.0}
+      - PREVIEW_CACHE_TTL=${PREVIEW_CACHE_TTL:-3.0}
       - MODELS_DIR=/app/models
       - GO2RTC_BASE_URL=http://go2rtc:1984
     env_file:
