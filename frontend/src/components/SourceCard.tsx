@@ -210,7 +210,6 @@ export default function SourceCard({
 
   useEffect(() => {
     const key = `${source.id}-${guestHistoryHours}-${guestHistoryInterval}`;
-    const windowEnd = new Date();
     const windowStart = new Date();
     windowStart.setHours(windowStart.getHours() - guestHistoryHours);
     const isFullFetch = historyKeyRef.current !== key;
