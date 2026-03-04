@@ -235,6 +235,31 @@ async def warm_preview_cache() -> None:
         await asyncio.sleep(1)
 
 
+_GUEST_HOURS_MIN, _GUEST_HOURS_MAX = 1, 8760  # 1 hour to 365 days
+
+@router.get("/history-config")
+async def get_history_config(db: AsyncSession = Depends(get_db)):
+    """Public: return guest history config (hours to show, interval) for home page cards."""
+    result = await db.execute(
+        select(BotConfig).where(BotConfig.key.in_(["history_guest_hours", "history_guest_days", "history_default_interval"]))
+    )
+    rows = result.scalars().all()
+    by_key = {r.key: r.value for r in rows}
+    guest_hours = 24
+    try:
+        if by_key.get("history_guest_hours") is not None:
+            guest_hours = max(_GUEST_HOURS_MIN, min(_GUEST_HOURS_MAX, int(by_key.get("history_guest_hours") or "24")))
+        else:
+            days = max(1, min(365, int(by_key.get("history_guest_days") or "1")))
+            guest_hours = days * 24
+    except (TypeError, ValueError):
+        pass
+    default_interval = by_key.get("history_default_interval") or "hour"
+    if default_interval not in ("minute", "5min", "10min", "30min", "hour", "day"):
+        default_interval = "hour"
+    return {"guest_hours": guest_hours, "default_interval": default_interval}
+
+
 @router.get("/history")
 async def get_history(
     source_id: int | None = None,

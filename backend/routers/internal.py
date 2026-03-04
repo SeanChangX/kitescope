@@ -1,15 +1,26 @@
 """Internal API for vision service: sources list (with url) and push counts."""
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from database import get_db
-from models import Source, CountHistory
+from models import Source, CountHistory, BotConfig
 from secret_config import get_internal_secret
 
 router = APIRouter()
+
+
+async def prune_count_history_by_retention(db: AsyncSession) -> None:
+    """Delete count_history rows older than history_retention_days. Call on startup and daily."""
+    ret = await db.execute(select(BotConfig).where(BotConfig.key == "history_retention_days"))
+    row = ret.scalar_one_or_none()
+    days = int(row.value) if row and row.value else 30
+    days = max(1, min(365, days))
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    await db.execute(delete(CountHistory).where(CountHistory.recorded_at < cutoff))
+    await db.flush()
 
 
 def _check_internal(x_internal_secret: str | None = Header(None, alias="X-Internal-Secret")):
@@ -57,7 +68,7 @@ async def internal_push_count(
     db: AsyncSession = Depends(get_db),
     _: None = Depends(_check_internal),
 ):
-    """Vision service posts current count for a source. Appended to history."""
+    """Vision service posts current count for a source. Appended to history. (Prune runs on startup and once per day.)"""
     rec = CountHistory(source_id=body.source_id, count=body.count, recorded_at=datetime.utcnow())
     db.add(rec)
     await db.flush()

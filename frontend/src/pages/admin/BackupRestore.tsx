@@ -15,12 +15,13 @@ export default function BackupRestore() {
       setMessage(t("admin.backupFailed"));
       return;
     }
-    const data = await r.json();
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const blob = await r.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `kitescope-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    const disp = r.headers.get("Content-Disposition");
+    const match = disp?.match(/filename=(.+)/);
+    a.download = match ? match[1].trim().replace(/^["']|["']$/g, "") : `kitescope-backup-${new Date().toISOString().slice(0, 10)}.zip`;
     a.click();
     URL.revokeObjectURL(url);
     setMessage(t("admin.backupDownloaded"));
@@ -34,7 +35,8 @@ export default function BackupRestore() {
     setRestoreLoading(true);
     try {
       const text = await file.text();
-      const backup = JSON.parse(text);
+      const parsed = JSON.parse(text) as { backup?: unknown } | Record<string, unknown>;
+      const backup = typeof parsed === "object" && parsed !== null && "backup" in parsed ? parsed.backup : parsed;
       const r = await authFetch("/api/admin/settings/restore", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

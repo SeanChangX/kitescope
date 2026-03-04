@@ -91,10 +91,10 @@ export default function HistoryView() {
       {sliced.length === 0 ? (
         <p className="text-text-muted">No history yet.</p>
       ) : (
-        <div className="h-64">
+        <div className="h-64 chart-line-draw">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={sliced}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+              <CartesianGrid stroke="#525252" strokeOpacity={0.25} vertical={false} />
               <XAxis dataKey="time" tick={{ fontSize: 10, fill: "#cccccc" }} />
               <YAxis tick={{ fontSize: 10, fill: "#cccccc" }} />
               <Tooltip

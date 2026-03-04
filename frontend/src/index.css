@@ -70,6 +70,26 @@
   .nav-tab:not(.active) {
     @apply bg-bg-tertiary text-text-secondary hover:bg-bg-input hover:text-text-primary;
   }
+  .chart-line-draw .recharts-line path,
+  .chart-line-draw .recharts-curve {
+    stroke-dasharray: 2000;
+    animation: lineDraw 5s ease-out forwards;
+  }
+  .chart-line-draw.chart-line-draw-done .recharts-line path,
+  .chart-line-draw.chart-line-draw-done .recharts-curve {
+    animation: none;
+    stroke-dasharray: unset;
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes lineDraw {
+  from {
+    stroke-dashoffset: 2000;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 
 ::-webkit-scrollbar {

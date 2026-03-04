@@ -1,6 +1,10 @@
+import io
+import json
 import os
 import re
+import zipfile
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, update, func, or_
 from pydantic import BaseModel
@@ -460,6 +464,17 @@ def _models_dir_ensure() -> str:
     return MODELS_DIR
 
 
+def _list_model_filenames() -> list[str]:
+    """Return sorted list of .onnx filenames in MODELS_DIR. Best-effort."""
+    try:
+        names = [f for f in os.listdir(MODELS_DIR)
+                 if f.endswith(".onnx") and _ALLOWED_MODEL_NAME.match(f) and os.path.isfile(os.path.join(MODELS_DIR, f))]
+        names.sort()
+        return names
+    except OSError:
+        return []
+
+
 @router.get("/settings/models")
 async def get_models(
     db: AsyncSession = Depends(get_db),
@@ -683,18 +698,30 @@ async def get_history_settings(
     db: AsyncSession = Depends(get_db),
     _: None = Depends(_admin_only),
 ):
-    result = await db.execute(select(BotConfig).where(BotConfig.key.in_(["history_retention_days", "history_default_interval"])))
+    result = await db.execute(select(BotConfig).where(BotConfig.key.in_([
+        "history_retention_days", "history_default_interval", "history_guest_hours", "history_guest_days",
+    ])))
     rows = result.scalars().all()
     by_key = {r.key: r.value for r in rows}
+    guest_hours = 24
+    try:
+        if by_key.get("history_guest_hours") is not None:
+            guest_hours = max(1, min(8760, int(by_key.get("history_guest_hours") or "24")))
+        else:
+            guest_hours = max(1, min(365, int(by_key.get("history_guest_days") or "1"))) * 24
+    except (TypeError, ValueError):
+        pass
     return {
         "retention_days": int(by_key.get("history_retention_days") or "30"),
         "default_interval": by_key.get("history_default_interval") or "hour",
+        "guest_hours": guest_hours,
     }
 
 
 class HistorySettingsBody(BaseModel):
     retention_days: int | None = None
     default_interval: str | None = None
+    guest_hours: int | None = None
 
 
 @router.put("/settings/history")
@@ -720,8 +747,27 @@ async def put_history_settings(
             row.updated_at = now
         else:
             db.add(BotConfig(key="history_default_interval", value=body.default_interval, updated_at=now))
+    if body.guest_hours is not None and 1 <= body.guest_hours <= 8760:
+        r = await db.execute(select(BotConfig).where(BotConfig.key == "history_guest_hours"))
+        row = r.scalar_one_or_none()
+        if row:
+            row.value = str(body.guest_hours)
+            row.updated_at = now
+        else:
+            db.add(BotConfig(key="history_guest_hours", value=str(body.guest_hours), updated_at=now))
     await db.flush()
     return {"message": "Saved"}
+
+
+@router.post("/history/clear")
+async def clear_history(
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(_admin_only),
+):
+    """Delete all count_history records. Irreversible."""
+    result = await db.execute(delete(CountHistory))
+    await db.flush()
+    return {"message": "Cleared", "deleted": result.rowcount}
 
 
 _BACKUP_VERSION = 1
@@ -739,15 +785,27 @@ async def backup_settings(
     db: AsyncSession = Depends(get_db),
     _: None = Depends(_admin_only),
 ):
-    """Export admin usernames, sources, users, notification subscriptions, bot config, history settings. Excludes count_history."""
+    """Export admin usernames, sources, pending_sources, users, notification subscriptions, bot config, history settings. Excludes count_history."""
     admin_rows = (await db.execute(select(AdminUser))).scalars().all()
     source_rows = (await db.execute(select(Source).order_by(Source.id))).scalars().all()
+    pending_rows = (await db.execute(select(PendingSource).order_by(PendingSource.id))).scalars().all()
     user_rows = (await db.execute(select(User).order_by(User.id))).scalars().all()
     sub_rows = (await db.execute(select(NotificationSubscription).order_by(NotificationSubscription.id))).scalars().all()
     bot_rows = (await db.execute(select(BotConfig).where(BotConfig.key.in_(_BOT_KEYS_BACKUP)))).scalars().all()
-    history_rows = (await db.execute(select(BotConfig).where(BotConfig.key.in_(["history_retention_days", "history_default_interval", "notify_format_template", VISION_SELECTED_MODEL_KEY, VISION_CONFIDENCE_THRESHOLD_KEY])))).scalars().all()
+    history_rows = (await db.execute(select(BotConfig).where(BotConfig.key.in_([
+        "history_retention_days", "history_default_interval", "history_guest_hours", "history_guest_days",
+        "notify_format_template", VISION_SELECTED_MODEL_KEY, VISION_CONFIDENCE_THRESHOLD_KEY,
+    ])))).scalars().all()
     by_key = {r.key: r.value for r in history_rows}
-    return {
+    guest_hours = 24
+    try:
+        if by_key.get("history_guest_hours") is not None:
+            guest_hours = max(1, min(8760, int(by_key.get("history_guest_hours") or "24")))
+        else:
+            guest_hours = max(1, min(365, int(by_key.get("history_guest_days") or "1"))) * 24
+    except (TypeError, ValueError):
+        pass
+    payload = {
         "version": _BACKUP_VERSION,
         "exported_at": datetime.utcnow().isoformat() + "Z",
         "admin_usernames": [r.username for r in admin_rows],
@@ -756,6 +814,11 @@ async def backup_settings(
              "enabled": r.enabled, "direct_embed": r.direct_embed, "pull_interval_sec": r.pull_interval_sec,
              "origin_url": r.origin_url, "created_at": r.created_at.isoformat(), "updated_at": r.updated_at.isoformat()}
             for r in source_rows
+        ],
+        "pending_sources": [
+            {"id": r.id, "url": r.url, "type": r.type or "", "name": r.name or "", "location": r.location or "",
+             "user_id": r.user_id, "created_at": r.created_at.isoformat()}
+            for r in pending_rows
         ],
         "users": [
             {"id": r.id, "line_id": r.line_id, "telegram_id": r.telegram_id, "display_name": r.display_name or "",
@@ -776,11 +839,32 @@ async def backup_settings(
         "history_settings": {
             "retention_days": int(by_key.get("history_retention_days") or "30"),
             "default_interval": by_key.get("history_default_interval") or "hour",
+            "guest_hours": guest_hours,
         },
         "notify_format": by_key.get("notify_format_template") or "",
         "vision_selected_model": by_key.get(VISION_SELECTED_MODEL_KEY) or "",
         "vision_confidence_threshold": by_key.get(VISION_CONFIDENCE_THRESHOLD_KEY) or "",
+        "model_filenames": _list_model_filenames(),
     }
+    model_filenames = payload["model_filenames"]
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("backup.json", json.dumps(payload, indent=2, ensure_ascii=False))
+        for fname in model_filenames:
+            path = os.path.join(MODELS_DIR, fname)
+            if os.path.isfile(path):
+                try:
+                    with open(path, "rb") as fp:
+                        zf.writestr(fname, fp.read())
+                except OSError:
+                    pass
+    buf.seek(0)
+    date_str = datetime.utcnow().strftime("%Y-%m-%d")
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename=kitescope-backup-{date_str}.zip"},
+    )
 
 
 class RestoreBody(BaseModel):
@@ -793,17 +877,20 @@ async def restore_settings(
     db: AsyncSession = Depends(get_db),
     _: None = Depends(_admin_only),
 ):
-    """Restore sources, users, notification subscriptions, bot config, and history settings from a backup. Does not restore admin accounts or count_history."""
+    """Restore from backup JSON only. Upload backup.json (e.g. extracted from the backup ZIP). Models must be re-uploaded in Model settings."""
     data = body.backup
     if not isinstance(data, dict) or data.get("version") != _BACKUP_VERSION:
         raise HTTPException(status_code=400, detail="Invalid or unsupported backup format")
     sources = data.get("sources")
+    pending_sources = data.get("pending_sources")
     users = data.get("users")
     subs = data.get("notification_subscriptions")
     bot_config = data.get("bot_config")
     history_settings = data.get("history_settings") or {}
     if not isinstance(sources, list) or not isinstance(users, list):
         raise HTTPException(status_code=400, detail="Backup must include sources and users lists")
+    if not isinstance(pending_sources, list):
+        pending_sources = []
     if not isinstance(subs, list):
         subs = []
     if not isinstance(bot_config, list):
@@ -812,6 +899,7 @@ async def restore_settings(
     await db.execute(delete(NotificationSubscription))
     await db.execute(delete(CountHistory))
     await db.execute(delete(Source))
+    await db.execute(delete(PendingSource))
     await db.execute(delete(User))
     await db.flush()
     # Insert sources with same ids
@@ -862,8 +950,25 @@ async def restore_settings(
             created_at=datetime.fromisoformat(row["created_at"].replace("Z", "+00:00")) if row.get("created_at") else datetime.utcnow(),
         ))
     await db.flush()
-    # Insert notification_subscriptions (only if user_id and source_id exist in restored data)
+    # Insert pending_sources (only if user_id is null or exists in restored users)
     user_ids = {r["id"] for r in users if isinstance(r, dict) and "id" in r}
+    for row in pending_sources:
+        if not isinstance(row, dict) or "id" not in row or "url" not in row:
+            continue
+        uid = row.get("user_id")
+        if uid is not None and uid not in user_ids:
+            continue
+        db.add(PendingSource(
+            id=row["id"],
+            url=row["url"],
+            type=row.get("type", ""),
+            name=row.get("name", ""),
+            location=row.get("location", ""),
+            user_id=uid,
+            created_at=datetime.fromisoformat(row["created_at"].replace("Z", "+00:00")) if row.get("created_at") else datetime.utcnow(),
+        ))
+    await db.flush()
+    # Insert notification_subscriptions (only if user_id and source_id exist in restored data)
     source_ids = {r["id"] for r in sources if isinstance(r, dict) and "id" in r}
     for row in subs:
         if not isinstance(row, dict) or row.get("user_id") not in user_ids or row.get("source_id") not in source_ids:
@@ -928,6 +1033,27 @@ async def restore_settings(
                 row.updated_at = now
             else:
                 db.add(BotConfig(key="history_default_interval", value=di, updated_at=now))
+        gh = history_settings.get("guest_hours")
+        if gh is not None:
+            val = max(1, min(8760, int(gh)))
+            r = await db.execute(select(BotConfig).where(BotConfig.key == "history_guest_hours"))
+            row = r.scalar_one_or_none()
+            if row:
+                row.value = str(val)
+                row.updated_at = now
+            else:
+                db.add(BotConfig(key="history_guest_hours", value=str(val), updated_at=now))
+        else:
+            gd = history_settings.get("guest_days")
+            if gd is not None:
+                val = max(1, min(8760, max(1, min(365, int(gd))) * 24))
+                r = await db.execute(select(BotConfig).where(BotConfig.key == "history_guest_hours"))
+                row = r.scalar_one_or_none()
+                if row:
+                    row.value = str(val)
+                    row.updated_at = now
+                else:
+                    db.add(BotConfig(key="history_guest_hours", value=str(val), updated_at=now))
     notify_format = data.get("notify_format")
     if notify_format is not None:
         v = (notify_format if isinstance(notify_format, str) else "").strip()
@@ -963,5 +1089,14 @@ async def restore_settings(
             row.updated_at = now
         else:
             db.add(BotConfig(key=VISION_CONFIDENCE_THRESHOLD_KEY, value=v, updated_at=now))
+    # Sync .selected so vision uses this model name after user re-uploads the file
+    selected = data.get("vision_selected_model")
+    if isinstance(selected, str) and _safe_model_filename(selected.strip()):
+        try:
+            _models_dir_ensure()
+            with open(os.path.join(MODELS_DIR, SELECTED_MODEL_FILE), "w") as fp:
+                fp.write(selected.strip())
+        except OSError:
+            pass
     await db.flush()
     return {"message": "Restored"}

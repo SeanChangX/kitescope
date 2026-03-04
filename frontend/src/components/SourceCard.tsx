@@ -59,14 +59,32 @@ const IconCondition = ({ desc }: { desc: string }) => {
 
 type HistoryRow = { source_id: number; count: number; recorded_at: string };
 
-function bucketKey(iso: string): string {
-  return iso.slice(0, 13);
+type ChartInterval = "minute" | "5min" | "10min" | "30min" | "hour" | "day";
+
+function bucketKey(iso: string, interval: string): string {
+  const d = new Date(iso);
+  if (interval === "day") return iso.slice(0, 10);
+  if (interval === "hour") return iso.slice(0, 13);
+  if (interval === "minute") return iso.slice(0, 16);
+  const min = d.getUTCMinutes();
+  const step = interval === "5min" ? 5 : interval === "10min" ? 10 : 30;
+  d.setUTCMinutes(Math.floor(min / step) * step, 0, 0);
+  return d.toISOString().slice(0, 16);
 }
 
-/** Format UTC hour key (e.g. "2026-02-17T16") as local date/time for chart display. */
-function bucketLabelLocal(key: string): string {
-  const d = new Date(key + ":00:00.000Z");
-  return d.toLocaleString(undefined, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+/** Format bucket key (UTC) as local date/time for chart display. */
+function bucketLabelLocal(key: string, interval: string): string {
+  const iso = key.length === 10 ? key + "T12:00:00.000Z" : key.length === 13 ? key + ":00:00.000Z" : key + ":00.000Z";
+  const d = new Date(iso);
+  return interval === "day"
+    ? d.toLocaleDateString(undefined, { month: "2-digit", day: "2-digit", year: "2-digit" })
+    : d.toLocaleString(undefined, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+function maxChartPoints(interval: string): number {
+  if (interval === "minute") return 60;
+  if (interval === "day") return 31;
+  return 24;
 }
 
 /** Display kite count: at most one decimal, no long float. */
@@ -105,9 +123,23 @@ export function isDirectEmbeddableUrl(url: string | undefined): boolean {
 /** Delay between starting each card's preview request (ms). From env VITE_PREVIEW_STAGGER_MS (e.g. in docker-compose). */
 const PREVIEW_STAGGER_MS = Number(import.meta.env.VITE_PREVIEW_STAGGER_MS) || 300;
 
-type Props = { source: Source; count: Count; previewTick: number; staggerIndex?: number };
+type Props = {
+  source: Source;
+  count: Count;
+  previewTick: number;
+  staggerIndex?: number;
+  guestHistoryHours?: number;
+  guestHistoryInterval?: string;
+};
 
-export default function SourceCard({ source, count, previewTick, staggerIndex = 0 }: Props) {
+export default function SourceCard({
+  source,
+  count,
+  previewTick,
+  staggerIndex = 0,
+  guestHistoryHours = 24,
+  guestHistoryInterval = "hour",
+}: Props) {
   const { t } = useI18n();
   const directEmbed = source.direct_embed === true;
   const useEmbeddedUrl = directEmbed && isDirectEmbeddableUrl(source.url) && !!source.url;
@@ -117,8 +149,11 @@ export default function SourceCard({ source, count, previewTick, staggerIndex = 
   const [previewError, setPreviewError] = useState(false);
   const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
   const [frameCount, setFrameCount] = useState<number | null>(null);
+  const [chartAnimationDone, setChartAnimationDone] = useState(false);
   const blobUrlRef = useRef<string | null>(null);
   const previewCancelledRef = useRef(false);
+  const historyLastRecordedRef = useRef<string | null>(null);
+  const historyKeyRef = useRef<string>("");
 
   // Fetch proxy preview when not using embedded image URL. Stagger by staggerIndex so cards load one by one.
   useEffect(() => {
@@ -174,15 +209,64 @@ export default function SourceCard({ source, count, previewTick, staggerIndex = 
   }, []);
 
   useEffect(() => {
-    const from = new Date();
-    from.setDate(from.getDate() - 7);
+    const key = `${source.id}-${guestHistoryHours}-${guestHistoryInterval}`;
+    const windowEnd = new Date();
+    const windowStart = new Date();
+    windowStart.setHours(windowStart.getHours() - guestHistoryHours);
+    const isFullFetch = historyKeyRef.current !== key;
+    if (isFullFetch) {
+      historyKeyRef.current = key;
+      historyLastRecordedRef.current = null;
+    }
+    const from = historyLastRecordedRef.current
+      ? new Date(historyLastRecordedRef.current)
+      : windowStart;
     fetch(
-      `${API}/history?source_id=${source.id}&from=${from.toISOString()}&interval=hour`
+      `${API}/history?source_id=${source.id}&from=${from.toISOString()}&interval=${encodeURIComponent(guestHistoryInterval)}`
     )
       .then((r) => r.json())
-      .then(setHistory)
+      .then((rows: HistoryRow[]) => {
+        if (isFullFetch || rows.length === 0) {
+          setHistory(rows);
+          if (rows.length > 0) {
+            const last = rows.reduce((a, b) => (a.recorded_at > b.recorded_at ? a : b));
+            historyLastRecordedRef.current = last.recorded_at;
+          }
+          return;
+        }
+        setHistory((prev) => {
+          const cut = windowStart.toISOString();
+          const seen = new Set<string>();
+          const merged = [...prev, ...rows]
+            .filter((r) => r.recorded_at >= cut)
+            .sort((a, b) => a.recorded_at.localeCompare(b.recorded_at));
+          const deduped = merged.filter((r) => {
+            if (seen.has(r.recorded_at)) return false;
+            seen.add(r.recorded_at);
+            return true;
+          });
+          if (deduped.length > 0) {
+            historyLastRecordedRef.current = deduped[deduped.length - 1].recorded_at;
+          }
+          return deduped;
+        });
+      })
       .catch(() => setHistory([]));
-  }, [source.id]);
+  }, [source.id, guestHistoryHours, guestHistoryInterval, previewTick]);
+
+  useEffect(() => {
+    if (source.id !== undefined) setChartAnimationDone(false);
+  }, [source.id, guestHistoryHours, guestHistoryInterval]);
+
+  useEffect(() => {
+    if (history.length === 0) {
+      setChartAnimationDone(false);
+      return;
+    }
+    if (chartAnimationDone) return;
+    const t = setTimeout(() => setChartAnimationDone(true), 5000);
+    return () => clearTimeout(t);
+  }, [history.length, chartAnimationDone]);
 
   useEffect(() => {
     if (!source.location?.trim()) {
@@ -203,18 +287,20 @@ export default function SourceCard({ source, count, previewTick, staggerIndex = 
   }, [source.location]);
 
   const byBucket = new Map<string, { sum: number; n: number }>();
+  const interval = guestHistoryInterval as ChartInterval;
   for (const r of history) {
-    const key = bucketKey(new Date(r.recorded_at).toISOString());
+    const key = bucketKey(new Date(r.recorded_at).toISOString(), interval);
     const cur = byBucket.get(key) ?? { sum: 0, n: 0 };
     cur.sum += r.count;
     cur.n += 1;
     byBucket.set(key, cur);
   }
+  const maxPoints = maxChartPoints(interval);
   const chartData = Array.from(byBucket.entries())
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .slice(-24)
+    .slice(-maxPoints)
     .map(([key, v]) => ({
-      time: bucketLabelLocal(key),
+      time: bucketLabelLocal(key, interval),
       count: v.n ? Math.round((v.sum / v.n) * 10) / 10 : 0,
     }));
 
@@ -305,11 +391,12 @@ export default function SourceCard({ source, count, previewTick, staggerIndex = 
         </div>
         <div className="h-24 mt-1">
           {chartData.length === 0 ? (
-            <p className="text-text-muted text-sm">No history yet.</p>
+            <p className="text-text-muted text-sm">{t("card.noDataInRange")}</p>
           ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="2 2" stroke="#374151" />
+            <div className={`chart-line-draw h-full w-full${chartAnimationDone ? " chart-line-draw-done" : ""}`}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                <CartesianGrid stroke="#525252" strokeOpacity={0.25} vertical={false} />
                 <XAxis
                   dataKey="time"
                   tick={{ fontSize: 9, fill: "#888888" }}
@@ -338,7 +425,8 @@ export default function SourceCard({ source, count, previewTick, staggerIndex = 
                   dot={false}
                 />
               </LineChart>
-            </ResponsiveContainer>
+              </ResponsiveContainer>
+            </div>
           )}
         </div>
       </div>

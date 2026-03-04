@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from database import init_db, AsyncSessionLocal
 from routers import public, admin, auth, internal, user_notifications
+from routers.internal import prune_count_history_by_retention
 from routers.public import close_vision_client, warm_preview_cache
 from notification_worker import start_worker
 from auth_admin import set_secret_key
@@ -37,6 +38,28 @@ async def lifespan(app: FastAPI):
         )
     task = start_worker()
 
+    # Prune count_history on startup (older than retention_days)
+    try:
+        async with AsyncSessionLocal() as session:
+            await prune_count_history_by_retention(session)
+            await session.commit()
+    except Exception:
+        pass
+
+    async def _prune_history_daily() -> None:
+        while True:
+            await asyncio.sleep(24 * 3600)  # 1 day
+            try:
+                async with AsyncSessionLocal() as session:
+                    await prune_count_history_by_retention(session)
+                    await session.commit()
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                pass
+
+    prune_task = asyncio.create_task(_prune_history_daily())
+
     async def _warm_preview_after_startup() -> None:
         await asyncio.sleep(5)
         try:
@@ -47,6 +70,11 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(_warm_preview_after_startup())
     yield
     await close_vision_client()
+    prune_task.cancel()
+    try:
+        await prune_task
+    except asyncio.CancelledError:
+        pass
     if task is not None and not task.done():
         task.cancel()
 

@@ -84,7 +84,7 @@ async def run_once():
             sources = r.json()
         except Exception:
             return
-    await asyncio.gather(*[_process_one_source(s, client) for s in sources])
+        await asyncio.gather(*[_process_one_source(s, client) for s in sources], return_exceptions=True)
 
 
 async def loop():

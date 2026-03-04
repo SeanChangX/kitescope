@@ -98,53 +98,51 @@ export default function BotSettings() {
     <div className="ks-card">
       <h3 className="font-gaming mb-3 font-medium text-text-primary">{t("admin.botSettings")}</h3>
       <form onSubmit={submit} className="space-y-4 max-w-lg">
-        <div>
-          <h4 className="text-sm font-medium text-text-secondary mb-2">{t("admin.line")}</h4>
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-text-muted mt-2 first:mt-0">{t("admin.lineMessagingApi")}</p>
-            <input
-              type="text"
-              placeholder={t("admin.channelId")}
-              value={form.line_channel_id}
-              onChange={(e) => setForm((f) => ({ ...f, line_channel_id: e.target.value }))}
-              className="ks-input"
-            />
-            <input
-              type="password"
-              placeholder={t("admin.channelSecretPlaceholder")}
-              value={form.line_channel_secret || (data?.line?.configured ? MASK : "")}
-              onChange={(e) => setForm((f) => ({ ...f, line_channel_secret: e.target.value === MASK ? "" : e.target.value }))}
-              className="ks-input"
-            />
-            <input
-              type="password"
-              placeholder={t("admin.channelAccessTokenPlaceholder")}
-              value={form.line_channel_access_token || (data?.line?.configured ? MASK : "")}
-              onChange={(e) => setForm((f) => ({ ...f, line_channel_access_token: e.target.value === MASK ? "" : e.target.value }))}
-              className="ks-input"
-            />
-            <p className="text-xs font-medium text-text-muted mt-2">{t("admin.lineLoginSection")}</p>
-            <input
-              type="text"
-              placeholder={t("admin.lineLoginChannelIdPlaceholder")}
-              value={form.line_login_channel_id}
-              onChange={(e) => setForm((f) => ({ ...f, line_login_channel_id: e.target.value }))}
-              className="ks-input"
-            />
-            <input
-              type="password"
-              placeholder={t("admin.lineLoginChannelSecretPlaceholder")}
-              value={form.line_login_channel_secret || (data?.line?.login_channel_id ? MASK : "")}
-              onChange={(e) => setForm((f) => ({ ...f, line_login_channel_secret: e.target.value === MASK ? "" : e.target.value }))}
-              className="ks-input"
-            />
-            {data?.line?.configured && (
-              <p className="text-xs text-text-muted">{t("admin.lineConfiguredHint")}</p>
-            )}
-          </div>
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium text-text-secondary">{t("admin.line")}</h4>
+          <p className="text-xs font-medium text-text-muted">{t("admin.lineMessagingApi")}</p>
+          <input
+            type="text"
+            placeholder={t("admin.channelId")}
+            value={form.line_channel_id}
+            onChange={(e) => setForm((f) => ({ ...f, line_channel_id: e.target.value }))}
+            className="ks-input"
+          />
+          <input
+            type="password"
+            placeholder={t("admin.channelSecretPlaceholder")}
+            value={form.line_channel_secret || (data?.line?.configured ? MASK : "")}
+            onChange={(e) => setForm((f) => ({ ...f, line_channel_secret: e.target.value === MASK ? "" : e.target.value }))}
+            className="ks-input"
+          />
+          <input
+            type="password"
+            placeholder={t("admin.channelAccessTokenPlaceholder")}
+            value={form.line_channel_access_token || (data?.line?.configured ? MASK : "")}
+            onChange={(e) => setForm((f) => ({ ...f, line_channel_access_token: e.target.value === MASK ? "" : e.target.value }))}
+            className="ks-input"
+          />
+          <p className="text-xs font-medium text-text-muted pt-1">{t("admin.lineLoginSection")}</p>
+          <input
+            type="text"
+            placeholder={t("admin.lineLoginChannelIdPlaceholder")}
+            value={form.line_login_channel_id}
+            onChange={(e) => setForm((f) => ({ ...f, line_login_channel_id: e.target.value }))}
+            className="ks-input"
+          />
+          <input
+            type="password"
+            placeholder={t("admin.lineLoginChannelSecretPlaceholder")}
+            value={form.line_login_channel_secret || (data?.line?.login_channel_id ? MASK : "")}
+            onChange={(e) => setForm((f) => ({ ...f, line_login_channel_secret: e.target.value === MASK ? "" : e.target.value }))}
+            className="ks-input"
+          />
+          {data?.line?.configured && (
+            <p className="text-xs text-text-muted">{t("admin.lineConfiguredHint")}</p>
+          )}
         </div>
-        <div>
-          <h4 className="text-sm font-medium text-text-secondary mb-2">{t("admin.telegram")}</h4>
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium text-text-secondary">{t("admin.telegram")}</h4>
           <input
             type="password"
             placeholder={t("admin.telegramBotTokenPlaceholder")}
@@ -156,8 +154,8 @@ export default function BotSettings() {
             <p className="text-xs text-text-muted">{t("admin.telegramConfiguredHint")}</p>
           )}
         </div>
-        <div>
-          <h4 className="text-sm font-medium text-text-secondary mb-2">{t("admin.publicAppUrl")}</h4>
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium text-text-secondary">{t("admin.publicAppUrl")}</h4>
           <input
             type="url"
             placeholder={t("admin.publicAppUrlPlaceholder")}
@@ -165,7 +163,7 @@ export default function BotSettings() {
             onChange={(e) => setForm((f) => ({ ...f, public_app_url: e.target.value }))}
             className="ks-input"
           />
-          <p className="text-xs text-text-muted mt-1">{t("admin.publicAppUrlHint")}</p>
+          <p className="text-xs text-text-muted">{t("admin.publicAppUrlHint")}</p>
         </div>
         {message && <p className="text-sm text-text-secondary">{message}</p>}
         <button

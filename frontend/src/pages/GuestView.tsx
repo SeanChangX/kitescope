@@ -32,12 +32,31 @@ function haversineKm(a: { lat: number; lon: number }, b: { lat: number; lon: num
 type Source = { id: number; name: string; type: string; location: string; location_display?: string; enabled: boolean; url?: string; direct_embed?: boolean };
 type Counts = Record<number, { count: number; recorded_at: string }>;
 
+type HistoryConfig = { guest_hours: number; default_interval: string };
+
 export default function GuestView() {
   const { t } = useI18n();
   const [sources, setSources] = useState<Source[]>([]);
   const [counts, setCounts] = useState<Counts>({});
   const [previewTick, setPreviewTick] = useState(0);
   const [userCoords, setUserCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [historyConfig, setHistoryConfig] = useState<HistoryConfig>({ guest_hours: 24, default_interval: "hour" });
+
+  useEffect(() => {
+    fetch(`${API}/history-config`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d && typeof d.guest_hours === "number" && typeof d.default_interval === "string") {
+          setHistoryConfig({
+            guest_hours: Math.max(1, Math.min(8760, d.guest_hours)),
+            default_interval: ["minute", "5min", "10min", "30min", "hour", "day"].includes(d.default_interval)
+              ? d.default_interval
+              : "hour",
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   function refreshSources() {
     fetch(`${API}/sources`)
@@ -110,6 +129,8 @@ export default function GuestView() {
                   count={counts[s.id]}
                   previewTick={previewTick}
                   staggerIndex={index}
+                  guestHistoryHours={historyConfig.guest_hours}
+                  guestHistoryInterval={historyConfig.default_interval}
                 />
               ))}
           </section>
