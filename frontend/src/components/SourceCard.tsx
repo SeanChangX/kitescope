@@ -81,10 +81,16 @@ function bucketLabelLocal(key: string, interval: string): string {
     : d.toLocaleString(undefined, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
-function maxChartPoints(interval: string): number {
-  if (interval === "minute") return 60;
-  if (interval === "day") return 31;
-  return 24;
+/** Max data points to show on chart, derived from guestHistoryHours and interval. */
+function maxChartPoints(interval: string, guestHistoryHours: number): number {
+  const hours = Math.max(1, guestHistoryHours);
+  if (interval === "minute") return Math.min(1440, Math.ceil(hours * 60));
+  if (interval === "5min") return Math.min(576, Math.ceil(hours * 12));
+  if (interval === "10min") return Math.min(288, Math.ceil(hours * 6));
+  if (interval === "30min") return Math.min(96, Math.ceil(hours * 2));
+  if (interval === "hour") return Math.min(720, Math.ceil(hours));
+  if (interval === "day") return Math.min(365, Math.ceil(hours / 24));
+  return Math.min(720, Math.ceil(hours));
 }
 
 /** Display kite count: at most one decimal, no long float. */
@@ -294,7 +300,7 @@ export default function SourceCard({
     cur.n += 1;
     byBucket.set(key, cur);
   }
-  const maxPoints = maxChartPoints(interval);
+  const maxPoints = maxChartPoints(interval, guestHistoryHours);
   const chartData = Array.from(byBucket.entries())
     .sort((a, b) => a[0].localeCompare(b[0]))
     .slice(-maxPoints)
