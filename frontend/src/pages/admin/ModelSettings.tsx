@@ -36,7 +36,8 @@ export default function ModelSettings() {
   async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.name.toLowerCase().endsWith(".onnx")) {
+    const lower = file.name.toLowerCase();
+    if (!lower.endsWith(".onnx") && !lower.endsWith(".tflite")) {
       setError(t("admin.modelUploadOnnxOnly"));
       return;
     }
@@ -123,7 +124,7 @@ export default function ModelSettings() {
             {uploading ? t("admin.uploading") : t("admin.modelUpload")}
             <input
               type="file"
-              accept=".onnx"
+              accept=".onnx,.tflite"
               className="sr-only"
               disabled={uploading}
               onChange={onUpload}

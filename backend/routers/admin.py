@@ -20,6 +20,10 @@ from secret_config import get_internal_secret
 
 router = APIRouter()
 
+# Vision stats history (last 60 points, 1 per minute). Persisted in backend so refresh keeps history.
+_VISION_STATS_HISTORY: list[dict] = []
+_VISION_HISTORY_MAX = 60
+
 # Unicode dash/minus variants that break NVR auth (e.g. pass=); normalize to ASCII hyphen
 _UNICODE_DASHES = re.compile("[\u2010\u2011\u2012\u2013\u2014\u2212\uff0d]")
 
@@ -450,11 +454,11 @@ SELECTED_MODEL_FILE = ".selected"  # Filename under MODELS_DIR; vision reads thi
 VISION_SELECTED_MODEL_KEY = "vision_selected_model"
 VISION_CONFIDENCE_THRESHOLD_KEY = "vision_confidence_threshold"
 
-_ALLOWED_MODEL_NAME = re.compile(r"^[a-zA-Z0-9_.-]+\.onnx$")
+_ALLOWED_MODEL_NAME = re.compile(r"^[a-zA-Z0-9_.-]+\.(onnx|tflite)$")
 
 
 def _safe_model_filename(name: str) -> str | None:
-    """Return basename if it matches allowed pattern else None."""
+    """Return basename if it matches allowed pattern (.onnx or .tflite) else None."""
     base = os.path.basename(name).strip()
     return base if _ALLOWED_MODEL_NAME.match(base) else None
 
@@ -465,10 +469,11 @@ def _models_dir_ensure() -> str:
 
 
 def _list_model_filenames() -> list[str]:
-    """Return sorted list of .onnx filenames in MODELS_DIR. Best-effort."""
+    """Return sorted list of .onnx and .tflite filenames in MODELS_DIR. Best-effort."""
     try:
         names = [f for f in os.listdir(MODELS_DIR)
-                 if f.endswith(".onnx") and _ALLOWED_MODEL_NAME.match(f) and os.path.isfile(os.path.join(MODELS_DIR, f))]
+                 if (f.endswith(".onnx") or f.endswith(".tflite")) and _ALLOWED_MODEL_NAME.match(f)
+                 and os.path.isfile(os.path.join(MODELS_DIR, f))]
         names.sort()
         return names
     except OSError:
@@ -480,12 +485,12 @@ async def get_models(
     db: AsyncSession = Depends(get_db),
     _: None = Depends(_admin_only),
 ):
-    """List uploaded .onnx model filenames, current selection, and confidence threshold."""
+    """List uploaded .onnx and .tflite model filenames, current selection, and confidence threshold."""
     _models_dir_ensure()
     models = []
     try:
         for f in os.listdir(MODELS_DIR):
-            if f.endswith(".onnx") and _ALLOWED_MODEL_NAME.match(f):
+            if (f.endswith(".onnx") or f.endswith(".tflite")) and _ALLOWED_MODEL_NAME.match(f):
                 models.append(f)
     except OSError:
         pass
@@ -523,11 +528,11 @@ async def upload_model(
     file: UploadFile = File(...),
     _: None = Depends(_admin_only),
 ):
-    """Upload an ONNX model file. Returns new filename (may be uniquified)."""
+    """Upload an ONNX or TFLite model file. Returns new filename (may be uniquified)."""
     _models_dir_ensure()
     name = _safe_model_filename(file.filename or "")
     if not name:
-        raise HTTPException(status_code=400, detail="Invalid or missing filename; use a .onnx file")
+        raise HTTPException(status_code=400, detail="Invalid or missing filename; use a .onnx or .tflite file")
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Empty file")
@@ -647,6 +652,57 @@ async def put_model_selected(
         except httpx.RequestError as e:
             raise HTTPException(status_code=502, detail="Vision service unreachable: " + str(e))
     return {"message": "Saved and applied" if (selected or confidence_threshold is not None) else "Saved"}
+
+
+@router.get("/system/status")
+async def get_system_status(_: None = Depends(_admin_only)):
+    """Return vision service config, detector status, and persisted stats history for admin system page."""
+    import httpx
+    global _VISION_STATS_HISTORY
+    vision_url = os.getenv("VISION_URL", "http://vision:9000").rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(f"{vision_url}/config")
+            if r.status_code != 200:
+                return {
+                    "vision_reachable": False,
+                    "vision_error": r.text or str(r.status_code),
+                    "vision": None,
+                    "history": _VISION_STATS_HISTORY[-_VISION_HISTORY_MAX:],
+                }
+            try:
+                data = r.json()
+            except Exception as e:
+                return {
+                    "vision_reachable": False,
+                    "vision_error": f"Invalid JSON: {e!s}",
+                    "vision": None,
+                    "history": _VISION_STATS_HISTORY[-_VISION_HISTORY_MAX:],
+                }
+            # Append at most once per minute so history persists across page refreshes
+            now_ms = round(datetime.utcnow().timestamp() * 1000)
+            if not _VISION_STATS_HISTORY or (now_ms - _VISION_STATS_HISTORY[-1]["t"]) >= 50_000:
+                snapshot = {
+                    "t": now_ms,
+                    "inference_speed_ms": data.get("inference_speed_ms"),
+                    "cpu_percent": data.get("cpu_percent"),
+                    "memory_percent": data.get("memory_percent"),
+                }
+                _VISION_STATS_HISTORY.append(snapshot)
+                if len(_VISION_STATS_HISTORY) > _VISION_HISTORY_MAX:
+                    _VISION_STATS_HISTORY = _VISION_STATS_HISTORY[-_VISION_HISTORY_MAX:]
+            return {
+                "vision_reachable": True,
+                "vision": data,
+                "history": _VISION_STATS_HISTORY,
+            }
+    except httpx.RequestError as e:
+        return {
+            "vision_reachable": False,
+            "vision_error": str(e),
+            "vision": None,
+            "history": _VISION_STATS_HISTORY[-_VISION_HISTORY_MAX:],
+        }
 
 
 class BotSettingsBody(BaseModel):

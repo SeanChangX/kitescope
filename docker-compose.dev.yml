@@ -62,12 +62,19 @@ services:
       - ./vision:/app
       - kitescope_data:/app/data
       - vision_models:/app/models
+      # Uncomment for Coral TPU Support
+      # For USB TPU:
+      # - /dev/bus/usb:/dev/bus/usb
+      # For PCIe/M.2 TPU:
+      # - /dev:/dev
     environment:
       - GO2RTC_BASE_URL=http://go2rtc:1984
       - BACKEND_URL=http://backend:8000
       - INTERNAL_SECRET_FILE=/app/data/internal_secret
       - MODELS_DIR=/app/models
       - VISION_LOOP_INTERVAL_SEC=5
+      # Detector: auto = use Coral if detected else CPU; cpu = force CPU; edgetpu = force Coral
+      - DETECT_DEVICE=${DETECT_DEVICE:-auto}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/health')"]
       interval: 15s

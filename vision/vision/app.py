@@ -10,6 +10,29 @@ import os
 from vision.ingestion_loop import loop as ingestion_loop
 
 _SNAPSHOT_CONCURRENCY = max(1, min(20, int(os.getenv("VISION_SNAPSHOT_CONCURRENCY", "8"))))
+
+# Background CPU sampling: sample over 1s every 10s so /config returns CPU during workload, not during request
+_cpu_sample: float | None = None
+_cpu_sample_interval = 10
+_cpu_task: asyncio.Task | None = None
+
+
+def _sync_cpu_sample() -> float | None:
+    """Blocking CPU sample; must be run in executor to avoid freezing the event loop."""
+    try:
+        import psutil
+        proc = psutil.Process()
+        return round(proc.cpu_percent(interval=1.0), 1)
+    except Exception:
+        return None
+
+
+async def _cpu_sampler_loop():
+    global _cpu_sample
+    loop = asyncio.get_event_loop()
+    while True:
+        _cpu_sample = await loop.run_in_executor(None, _sync_cpu_sample)
+        await asyncio.sleep(_cpu_sample_interval)
 _snapshot_semaphore = asyncio.Semaphore(_SNAPSHOT_CONCURRENCY)
 # Throttle "snapshot failed" log per URL to avoid flooding when YouTube/server blocks same URL repeatedly
 _fail_log_throttle: dict[str, float] = {}
@@ -37,10 +60,17 @@ def _apply_saved_model_selection() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _cpu_task
     _apply_saved_model_selection()
+    _cpu_task = asyncio.create_task(_cpu_sampler_loop())
     task = asyncio.create_task(ingestion_loop())
     yield
+    _cpu_task.cancel()
     task.cancel()
+    try:
+        await _cpu_task
+    except asyncio.CancelledError:
+        pass
     try:
         await task
     except asyncio.CancelledError:
@@ -58,15 +88,43 @@ async def health():
 
 @app.get("/config")
 async def config():
-    from vision.detector import _get_session, MODEL_PATH, CONFIDENCE_THRESHOLD
+    from vision.detector import (
+        _get_session,
+        _get_edgetpu_interpreter,
+        get_detector_status,
+        get_inference_stats,
+        MODEL_PATH,
+        CONFIDENCE_THRESHOLD,
+    )
     from vision.ingestion_loop import INGESTION_CONCURRENCY
+    status = get_detector_status()
+    onnx_loaded = _get_session() is not None
+    edgetpu_loaded = _get_edgetpu_interpreter() is not None
+    inference_stats = get_inference_stats()
+    # CPU from background sampler (reflects workload). RAM from current process
+    process_stats = {"cpu_percent": _cpu_sample, "memory_percent": None, "memory_mb": None}
+    try:
+        import psutil
+        proc = psutil.Process()
+        process_stats["memory_percent"] = round(proc.memory_percent(), 2)
+        process_stats["memory_mb"] = round(proc.memory_info().rss / (1024 * 1024), 1)
+    except Exception:
+        pass
     return {
         "model_path": MODEL_PATH,
-        "model_loaded": _get_session() is not None,
+        "model_loaded": onnx_loaded or edgetpu_loaded,
         "model_exists": os.path.isfile(MODEL_PATH) if MODEL_PATH else False,
         "confidence_threshold": CONFIDENCE_THRESHOLD,
         "skip_frames": int(os.getenv("SKIP_FRAMES", "3")),
         "ingestion_concurrency": INGESTION_CONCURRENCY,
+        "detector_device": status["detector_device"],
+        "detect_device_env": status["detect_device_env"],
+        "tpu_detected": status["tpu_detected"],
+        "tpu_devices": status["tpu_devices"],
+        "inference_speed_ms": inference_stats.get("inference_speed_ms"),
+        "cpu_percent": process_stats.get("cpu_percent"),
+        "memory_percent": process_stats.get("memory_percent"),
+        "memory_mb": process_stats.get("memory_mb"),
     }
 
 
