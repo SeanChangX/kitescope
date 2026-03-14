@@ -56,18 +56,20 @@ services:
       dockerfile: Dockerfile
     image: seanchangx/kitescope-vision:latest
     container_name: kitescope-vision
-    privileged: true
     ports:
       - "9000:9000"
     volumes:
       - ./vision:/app
       - kitescope_data:/app/data
       - vision_models:/app/models
-      # Uncomment for Coral TPU Support
-      # For USB TPU:
-      # - /dev/bus/usb:/dev/bus/usb
-      # For PCIe/M.2 TPU:
-      # - /dev:/dev
+      # Coral USB TPU access without full privileged mode.
+      - /dev/bus/usb:/dev/bus/usb
+      # Optional: mount host USB sysfs for hardware presence detection if needed.
+      # - /sys/bus/usb/devices:/sys/bus/usb/devices:ro
+      # For PCIe/M.2 TPU, map the specific device instead:
+      # - /dev/apex_0:/dev/apex_0
+    device_cgroup_rules:
+      - "c 189:* rmw"
     environment:
       - GO2RTC_BASE_URL=http://go2rtc:1984
       - BACKEND_URL=http://backend:8000

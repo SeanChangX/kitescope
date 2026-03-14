@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
+import type { TooltipProps } from "recharts";
 import {
   LineChart,
   Line,
@@ -18,6 +19,28 @@ const RANGES: { key: RangeKey; label: string; days: number; bucket: "hour" | "da
   { key: "7", label: "Last 7 days (hourly)", days: 7, bucket: "hour" },
   { key: "30", label: "Last 30 days (daily)", days: 30, bucket: "day" },
 ];
+
+const CHART_TOOLTIP_STYLE: CSSProperties = {
+  margin: 0,
+  padding: "6px 10px",
+  fontSize: 12,
+  borderRadius: 8,
+  backgroundColor: "rgba(10, 10, 10, 0.96)",
+  border: "none",
+  textAlign: "left",
+  boxShadow: "0 8px 24px rgba(0, 0, 0, 0.65)",
+};
+
+function HistoryTooltipContent(props: TooltipProps<number, string>) {
+  const { active, payload, label } = props;
+  if (!active || !payload?.length || payload[0].value == null) return null;
+  return (
+    <div style={CHART_TOOLTIP_STYLE}>
+      <div style={{ color: "rgba(248, 250, 252, 0.9)" }}>{label}</div>
+      <div style={{ color: "rgb(248, 250, 252)" }}>kites: {payload[0].value}</div>
+    </div>
+  );
+}
 
 export default function HistoryView() {
   const [data, setData] = useState<HistoryRow[]>([]);
@@ -71,8 +94,9 @@ export default function HistoryView() {
               <XAxis dataKey="time" tick={{ fontSize: 10, fill: "#cccccc" }} />
               <YAxis tick={{ fontSize: 10, fill: "#cccccc" }} />
               <Tooltip
-                contentStyle={{ backgroundColor: "#1f1f1f", border: "1px solid #374151", borderRadius: "8px" }}
-                labelStyle={{ color: "#cccccc" }}
+                content={<HistoryTooltipContent />}
+                cursor={{ fill: "transparent" }}
+                wrapperStyle={{ border: "none", outline: "none" }}
               />
               <Line type="monotone" dataKey="count" stroke="#ff0050" strokeWidth={2} dot={false} />
             </LineChart>

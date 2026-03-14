@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import type { TooltipProps } from "recharts";
 import {
   LineChart,
   Line,
@@ -105,6 +106,28 @@ export function isDirectEmbeddableUrl(url: string | undefined): boolean {
 
 /** Delay between starting each card's preview request (ms). From env VITE_PREVIEW_STAGGER_MS (e.g. in docker-compose). */
 const PREVIEW_STAGGER_MS = Number(import.meta.env.VITE_PREVIEW_STAGGER_MS) || 300;
+
+const CHART_TOOLTIP_STYLE: CSSProperties = {
+  margin: 0,
+  padding: "6px 10px",
+  fontSize: 12,
+  borderRadius: 8,
+  backgroundColor: "rgba(10, 10, 10, 0.96)",
+  border: "none",
+  textAlign: "left",
+  boxShadow: "0 8px 24px rgba(0, 0, 0, 0.65)",
+};
+
+function HistoryTooltipContent(props: TooltipProps<number, string>) {
+  const { active, payload, label } = props;
+  if (!active || !payload?.length || payload[0].value == null) return null;
+  return (
+    <div style={CHART_TOOLTIP_STYLE}>
+      <div style={{ color: "rgba(248, 250, 252, 0.9)" }}>{label}</div>
+      <div style={{ color: "rgb(248, 250, 252)" }}>kites: {payload[0].value}</div>
+    </div>
+  );
+}
 
 type Props = {
   source: Source;
@@ -378,14 +401,9 @@ export default function SourceCard({
                   tickFormatter={(v) => (Number(v) === v ? String(v) : "")}
                 />
                 <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#1f1f1f",
-                    border: "1px solid #374151",
-                    borderRadius: "6px",
-                    fontSize: "12px",
-                  }}
-                  formatter={(v: number) => [formatKiteCount(Number(v)), "kites"]}
-                  labelFormatter={(label: string) => label}
+                  content={<HistoryTooltipContent />}
+                  cursor={{ fill: "transparent" }}
+                  wrapperStyle={{ border: "none", outline: "none" }}
                 />
                 <Line
                   type="monotone"
