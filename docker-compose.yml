@@ -54,6 +54,7 @@ services:
       dockerfile: Dockerfile
     image: seanchangx/kitescope-vision:latest
     container_name: kitescope-vision
+    privileged: true
     restart: unless-stopped
     volumes:
       - kitescope_data:/app/data
@@ -69,6 +70,7 @@ services:
       - INTERNAL_SECRET_FILE=/app/data/internal_secret
       - MODELS_DIR=/app/models
       - VISION_LOOP_INTERVAL_SEC=30
+      - VISION_LOG_LEVEL=WARNING
       # Detector: auto = use Coral if detected else CPU; cpu = force CPU; edgetpu = force Coral
       - DETECT_DEVICE=${DETECT_DEVICE:-auto}
     env_file:

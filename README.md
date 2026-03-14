@@ -114,16 +114,18 @@ Credentials stay on the backend and are not exposed to the frontend.
 
 The vision service needs a detection model to report kite counts. Without a model, counts stay at 0.
 
-- **CPU path (default)**: upload an **ONNX** model where **class 0 is kite** (e.g. YOLOv8 trained on a kite dataset and exported to ONNX).  
-- **Coral Edge TPU (optional)**: upload a **TFLite model compiled for Edge TPU** (INT8, via `edgetpu_compiler`). When a `.tflite` model is selected and a Coral TPU is available, inference runs on the TPU.
+- **CPU path (default)**: upload an **ONNX** model where **class 0 is kite**.
+- **Coral Edge TPU (optional)**: upload a **compiled Edge TPU TFLite** model. When a `.tflite` model is selected and a Coral TPU is available, inference runs on the TPU.
 
 In the admin UI go to **Settings → Model settings**: upload the model file (.onnx for CPU, .tflite for Coral) or place it in the vision model volume and select it there. Confidence and other options can be set in the same page.
+
+For the full export, quantization, and Coral compilation workflow, see [`vision/scripts/README.md`](vision/scripts/README.md).
 
 ### Coral Edge TPU (optional)
 
 KiteScope can offload detection to a Google Coral Edge TPU:
 
-- **Model**: use a YOLO-style TFLite model compiled for Edge TPU where **class 0 is kite**.
+- **Model**: use a YOLO-style Edge TPU model where **class 0 is kite**.
 - **Docker mapping** (USB Coral example, vision service):
   - Uncomment in `docker-compose.yml` / `docker-compose.dev.yml`:
     - `- /dev/bus/usb:/dev/bus/usb`
@@ -131,12 +133,6 @@ KiteScope can offload detection to a Google Coral Edge TPU:
   - `DETECT_DEVICE=auto` (default): use Coral when detected, otherwise CPU.
   - `DETECT_DEVICE=cpu`: force CPU ONNX backend.
   - `DETECT_DEVICE=edgetpu`: force Coral (falls back to CPU if no TPU).
-- **PyCoral**:
-  - Install in the vision image or environment:
-    ```bash
-    pip install pycoral
-    ```
-  - If `pycoral` is not installed, the vision service automatically falls back to CPU (ONNX) even if a TPU is present.
 
 To confirm which backend is used, open **Admin → Dashboard** and check the **System status** card: it shows whether the detector is running on **CPU (ONNX)** or **Coral Edge TPU**, and whether a TPU was detected.
 

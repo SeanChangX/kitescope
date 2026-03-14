@@ -2,10 +2,10 @@
 from contextlib import asynccontextmanager
 import asyncio
 import logging
+import os
 import time
 from fastapi import FastAPI, HTTPException, Header, Body
 from fastapi.middleware.cors import CORSMiddleware
-import os
 
 from vision.ingestion_loop import loop as ingestion_loop
 
@@ -46,14 +46,40 @@ def _apply_saved_model_selection() -> None:
     from vision.detector import MODELS_DIR, reload_model
     if not MODELS_DIR:
         return
-    path = os.path.join(MODELS_DIR, ".selected")
-    if not os.path.isfile(path):
+
+    selected_path = os.path.join(MODELS_DIR, ".selected")
+
+    def _persist_selected(name: str) -> None:
+        try:
+            with open(selected_path, "w") as f:
+                f.write(name)
+        except OSError:
+            pass
+
+    def _fallback_to_first_onnx() -> None:
+        try:
+            candidates = sorted(
+                name for name in os.listdir(MODELS_DIR)
+                if name.lower().endswith(".onnx") and os.path.isfile(os.path.join(MODELS_DIR, name))
+            )
+        except OSError:
+            return
+        for candidate in candidates:
+            if reload_model(candidate):
+                log.warning("Fell back to stable ONNX model on startup: %s", candidate)
+                _persist_selected(candidate)
+                return
+
+    if not os.path.isfile(selected_path):
         return
     try:
-        with open(path) as f:
+        with open(selected_path) as f:
             name = (f.read() or "").strip()
         if name and reload_model(name):
             log.info("Applied saved model selection: %s", name)
+        elif name:
+            log.warning("Saved model selection rejected on startup: %s", name)
+            _fallback_to_first_onnx()
     except OSError:
         pass
 
@@ -75,6 +101,8 @@ async def lifespan(app: FastAPI):
         await task
     except asyncio.CancelledError:
         pass
+    from vision.detector import shutdown_worker
+    shutdown_worker()
 
 
 app = FastAPI(title="KiteScope Vision", version="0.1.0", lifespan=lifespan)
@@ -90,7 +118,6 @@ async def health():
 async def config():
     from vision.detector import (
         _get_session,
-        _get_edgetpu_interpreter,
         get_detector_status,
         get_inference_stats,
         MODEL_PATH,
@@ -98,9 +125,20 @@ async def config():
     )
     from vision.ingestion_loop import INGESTION_CONCURRENCY
     status = get_detector_status()
+    # Only touch the ONNX session here; avoid constructing the Edge TPU interpreter
+    # from a status endpoint to reduce native-library instability when models switch.
     onnx_loaded = _get_session() is not None
-    edgetpu_loaded = _get_edgetpu_interpreter() is not None
     inference_stats = get_inference_stats()
+    configured_model_architecture = (
+        "tflite" if MODEL_PATH.lower().endswith(".tflite")
+        else "onnx" if MODEL_PATH.lower().endswith(".onnx")
+        else None
+    )
+    active_model_path = None
+    if status["detector_device"] == "cpu" and configured_model_architecture == "onnx":
+        active_model_path = MODEL_PATH
+    elif status["detector_device"] == "edgetpu" and configured_model_architecture == "tflite":
+        active_model_path = MODEL_PATH
     # CPU from background sampler (reflects workload). RAM from current process
     process_stats = {"cpu_percent": _cpu_sample, "memory_percent": None, "memory_mb": None}
     try:
@@ -112,7 +150,12 @@ async def config():
         pass
     return {
         "model_path": MODEL_PATH,
-        "model_loaded": onnx_loaded or edgetpu_loaded,
+        "active_model_path": active_model_path,
+        "model_architecture": configured_model_architecture,
+        "active_model_architecture": (
+            configured_model_architecture if active_model_path else None
+        ),
+        "model_loaded": onnx_loaded or (status["detector_device"] == "edgetpu" and active_model_path is not None),
         "model_exists": os.path.isfile(MODEL_PATH) if MODEL_PATH else False,
         "confidence_threshold": CONFIDENCE_THRESHOLD,
         "skip_frames": int(os.getenv("SKIP_FRAMES", "3")),
@@ -155,15 +198,15 @@ async def reload_model_endpoint(
 ):
     """Internal: switch detection model by filename (under MODELS_DIR). Requires X-Internal-Secret."""
     from vision.ingestion_loop import INTERNAL_SECRET
-    from vision.detector import reload_model
+    from vision.detector import get_last_reload_error, reload_model
     if not INTERNAL_SECRET or x_internal_secret != INTERNAL_SECRET:
         raise HTTPException(status_code=401, detail="Unauthorized")
     name = (model or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="model query required")
-    if not reload_model(name):
-        raise HTTPException(status_code=400, detail="Model file not found or invalid name")
-    return {"ok": True, "model_path": name}
+    if not await asyncio.to_thread(reload_model, name):
+        raise HTTPException(status_code=400, detail=get_last_reload_error() or "Model reload failed")
+    return {"ok": True, "model_path": name, "restarting": False}
 
 
 @app.get("/snapshot")

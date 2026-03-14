@@ -1,52 +1,85 @@
-# Environment
-.env
-.env.local
-*.local
-
-# Data (SQLite, uploads)
-data/
-*.db
-*.sqlite
-*.sqlite3
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-venv/
-.venv/
-*.egg-info/
-.eggs/
-
-# Node
-node_modules/
-npm-debug.log*
-.pnpm-debug.log*
-dist/
-build/
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-
 # OS
 .DS_Store
 Thumbs.db
 
-# Logs
-logs/
-*.log
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
 
-# Model files (large)
-*.onnx
-*.pt
-*.pth
-*.keras
-
-# Keys / secrets (do not commit)
+# Environment / local config
+.env
+.env.*
+!.env.example
+!.env.sample
 *.pem
+*.key
+*.p12
 secrets/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+.python-version
+.venv/
+venv/
+env/
+ENV/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.pyre/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+.hypothesis/
+
+# Build / packaging
+build/
+dist/
+site/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Node / frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
+.pnpm-store/
+.yarn/
+.parcel-cache/
+.next/
+.nuxt/
+.svelte-kit/
+coverage/
+
+# Tool caches
+.cache/
+
+# Runtime / local data
+*.db
+*.sqlite
+*.sqlite3
+data/
+
+# Project-specific generated model artifacts
+vision/scripts/**/*.pt
+vision/scripts/**/*.onnx
+vision/scripts/**/*.tflite
+vision/scripts/**/*.npy
+vision/scripts/**/*.log
+vision/scripts/**/*_saved_model/
+calibration_image_sample_data_*.npy

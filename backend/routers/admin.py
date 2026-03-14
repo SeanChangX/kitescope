@@ -562,16 +562,15 @@ async def delete_model(
     path = os.path.join(MODELS_DIR, safe)
     if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Model not found")
+    r = await db.execute(select(BotConfig).where(BotConfig.key == VISION_SELECTED_MODEL_KEY))
+    row = r.scalar_one_or_none()
+    selected = (row.value or "").strip() if row else ""
+    if selected == safe:
+        raise HTTPException(status_code=409, detail="Cannot delete the model currently in use")
     try:
         os.remove(path)
     except OSError as e:
         raise HTTPException(status_code=500, detail=str(e))
-    r = await db.execute(select(BotConfig).where(BotConfig.key == VISION_SELECTED_MODEL_KEY))
-    row = r.scalar_one_or_none()
-    if row and (row.value or "").strip() == safe:
-        row.value = ""
-        row.updated_at = datetime.utcnow()
-        await db.flush()
     return {"message": "Deleted"}
 
 
@@ -588,6 +587,17 @@ async def put_model_selected(
 ):
     """Set selected model and/or confidence threshold; tell vision to apply. Empty selected clears selection."""
     import httpx
+
+    def _model_arch(name: str | None) -> str | None:
+        if not name:
+            return None
+        lower = name.lower()
+        if lower.endswith(".onnx"):
+            return "onnx"
+        if lower.endswith(".tflite"):
+            return "tflite"
+        return None
+
     selected = (body.selected or "").strip() or None
     confidence_threshold = body.confidence_threshold
     if selected:
@@ -601,6 +611,9 @@ async def put_model_selected(
     now = datetime.utcnow()
     r = await db.execute(select(BotConfig).where(BotConfig.key == VISION_SELECTED_MODEL_KEY))
     row = r.scalar_one_or_none()
+    previous_selected = (row.value or "").strip() if row else ""
+    previous_arch = _model_arch(previous_selected or None)
+    selected_arch = _model_arch(selected)
     if row:
         row.value = selected or ""
         row.updated_at = now
@@ -617,6 +630,7 @@ async def put_model_selected(
             f.write(selected or "")
     except OSError:
         pass  # Best-effort; vision may still get selection via reload-model below
+    switching = bool(selected and selected != previous_selected)
     if selected:
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -651,7 +665,13 @@ async def put_model_selected(
                     raise HTTPException(status_code=502, detail="Vision config update failed: " + (r.text or str(r.status_code)))
         except httpx.RequestError as e:
             raise HTTPException(status_code=502, detail="Vision service unreachable: " + str(e))
-    return {"message": "Saved and applied" if (selected or confidence_threshold is not None) else "Saved"}
+    return {
+        "message": "Saved and switching" if switching else ("Saved and applied" if (selected or confidence_threshold is not None) else "Saved"),
+        "switching": switching,
+        "selected": selected or "",
+        "selected_architecture": selected_arch,
+        "previous_architecture": previous_arch,
+    }
 
 
 @router.get("/system/status")

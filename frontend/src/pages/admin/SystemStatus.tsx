@@ -98,6 +98,9 @@ function makeChartTooltipContent(unit: string, labelName: string) {
 
 interface VisionConfig {
   model_path?: string;
+  active_model_path?: string;
+  model_architecture?: string | null;
+  active_model_architecture?: string | null;
   model_loaded?: boolean;
   model_exists?: boolean;
   detector_device?: string;
@@ -183,6 +186,7 @@ export default function SystemStatus() {
   const detectorLabel =
     v?.detector_device === "edgetpu" ? t("admin.detectorEdgetpu") : t("admin.detectorCpu");
   const detectorPillLabel = v?.detector_device === "edgetpu" ? "Coral Edge TPU" : "CPU (ONNX)";
+  const displayedModelPath = v?.active_model_path;
 
   const chartData = buildChartData(history);
   const hasAnyBars = chartData.some((r) => r.inference != null || r.cpu != null || r.memory != null);
@@ -227,16 +231,30 @@ export default function SystemStatus() {
                 {detectorPillLabel}
               </span>
             </span>
-            {v.model_path && (
+            <span
+              className="inline-flex h-8 items-center rounded-full border border-border-dark bg-bg-secondary/70 px-2"
+              title={v?.tpu_detected ? t("admin.tpuDetected") : t("admin.tpuNotDetected")}
+            >
+              <span
+                className={`inline-flex items-center rounded-full px-3 py-0.5 text-xs font-medium leading-none ${
+                  v?.tpu_detected
+                    ? "bg-green-500/20 text-green-300"
+                    : "bg-red-500/20 text-red-300"
+                }`}
+              >
+                <span className="mt-px">Coral</span>
+              </span>
+            </span>
+            {displayedModelPath && (
               <span
                 className="inline-flex h-8 items-center gap-2 rounded-full border border-border-dark bg-bg-secondary/70 pl-2 pr-3"
-                title={v.model_path}
+                title={displayedModelPath}
               >
                 <span className="inline-flex items-center rounded-full bg-bg-tertiary/80 px-3 py-0.5 text-xs font-medium leading-none text-text-secondary">
                   <span className="mt-px">Model</span>
                 </span>
                 <span className="inline-flex max-w-[10rem] sm:max-w-[12rem] items-center truncate text-xs font-mono text-text-secondary mt-px min-w-0">
-                  {v.model_path.split("/").pop()}
+                  {displayedModelPath.split("/").pop()}
                 </span>
               </span>
             )}
