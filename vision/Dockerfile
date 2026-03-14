@@ -67,10 +67,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # tflite_runtime with Edge TPU support: feranick wheel for amd64 (v2.17.1; v2.18.0 has no linux_x86_64 wheel), PyPI for other arches
 RUN arch=$(dpkg --print-architecture 2>/dev/null || echo ""); \
     if [ "$arch" = "amd64" ]; then \
-      curl -fsSLo /tmp/tflite_runtime.whl "https://github.com/feranick/TFlite-builds/releases/download/v${TFLITE_RUNTIME_VERSION}/tflite_runtime-${TFLITE_RUNTIME_VERSION}-cp311-cp311-linux_x86_64.whl" \
-      && echo "${TFLITE_RUNTIME_SHA256}  /tmp/tflite_runtime.whl" | sha256sum -c - \
-      && pip install --no-cache-dir /tmp/tflite_runtime.whl \
-      && rm /tmp/tflite_runtime.whl; \
+      TFLITE_WHEEL="/tmp/tflite_runtime-${TFLITE_RUNTIME_VERSION}-cp311-cp311-linux_x86_64.whl"; \
+      curl -fsSLo "${TFLITE_WHEEL}" "https://github.com/feranick/TFlite-builds/releases/download/v${TFLITE_RUNTIME_VERSION}/tflite_runtime-${TFLITE_RUNTIME_VERSION}-cp311-cp311-linux_x86_64.whl" \
+      && echo "${TFLITE_RUNTIME_SHA256}  ${TFLITE_WHEEL}" | sha256sum -c - \
+      && pip install --no-cache-dir "${TFLITE_WHEEL}" \
+      && rm "${TFLITE_WHEEL}"; \
     else \
       pip install --no-cache-dir "tflite-runtime==2.18.0"; \
     fi

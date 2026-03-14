@@ -9,6 +9,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { useI18n } from "../lib/i18n";
+import { buildFilledChartData, type ChartInterval, type HistoryRow } from "../lib/historyChart";
 
 const API = "/api";
 
@@ -56,30 +57,6 @@ const IconCondition = ({ desc }: { desc: string }) => {
     </svg>
   );
 };
-
-type HistoryRow = { source_id: number; count: number; recorded_at: string };
-
-type ChartInterval = "minute" | "5min" | "10min" | "30min" | "hour" | "day";
-
-function bucketKey(iso: string, interval: string): string {
-  const d = new Date(iso);
-  if (interval === "day") return iso.slice(0, 10);
-  if (interval === "hour") return iso.slice(0, 13);
-  if (interval === "minute") return iso.slice(0, 16);
-  const min = d.getUTCMinutes();
-  const step = interval === "5min" ? 5 : interval === "10min" ? 10 : 30;
-  d.setUTCMinutes(Math.floor(min / step) * step, 0, 0);
-  return d.toISOString().slice(0, 16);
-}
-
-/** Format bucket key (UTC) as local date/time for chart display. */
-function bucketLabelLocal(key: string, interval: string): string {
-  const iso = key.length === 10 ? key + "T12:00:00.000Z" : key.length === 13 ? key + ":00:00.000Z" : key + ":00.000Z";
-  const d = new Date(iso);
-  return interval === "day"
-    ? d.toLocaleDateString(undefined, { month: "2-digit", day: "2-digit", year: "2-digit" })
-    : d.toLocaleString(undefined, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-}
 
 /** Max data points to show on chart, derived from guestHistoryHours and interval. */
 function maxChartPoints(interval: string, guestHistoryHours: number): number {
@@ -291,23 +268,11 @@ export default function SourceCard({
       });
   }, [source.location]);
 
-  const byBucket = new Map<string, { sum: number; n: number }>();
   const interval = guestHistoryInterval as ChartInterval;
-  for (const r of history) {
-    const key = bucketKey(new Date(r.recorded_at).toISOString(), interval);
-    const cur = byBucket.get(key) ?? { sum: 0, n: 0 };
-    cur.sum += r.count;
-    cur.n += 1;
-    byBucket.set(key, cur);
-  }
   const maxPoints = maxChartPoints(interval, guestHistoryHours);
-  const chartData = Array.from(byBucket.entries())
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .slice(-maxPoints)
-    .map(([key, v]) => ({
-      time: bucketLabelLocal(key, interval),
-      count: v.n ? Math.round((v.sum / v.n) * 10) / 10 : 0,
-    }));
+  const chartStart = new Date();
+  chartStart.setHours(chartStart.getHours() - guestHistoryHours);
+  const chartData = buildFilledChartData(history, interval, chartStart, new Date(), maxPoints);
 
   return (
     <article className="ks-card overflow-hidden p-0 flex flex-col">
