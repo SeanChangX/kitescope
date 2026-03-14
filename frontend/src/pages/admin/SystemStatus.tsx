@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import type { TooltipProps } from "recharts";
 import {
   BarChart,
@@ -12,7 +12,7 @@ import {
 import { authFetch } from "../../lib/auth";
 import { useI18n } from "../../lib/i18n";
 
-const TOOLTIP_STYLE: React.CSSProperties = {
+const TOOLTIP_STYLE: CSSProperties = {
   margin: 0,
   padding: "6px 10px",
   fontSize: 12,
@@ -39,16 +39,23 @@ function getBarColor(metric: "inference" | "cpu" | "memory", value: number | nul
 const BAR_ROLL_DURATION_MS = 220;
 const BAR_ROLL_STAGGER_MS = 12;
 
-function renderBarShape(props: {
-  x?: number;
-  y?: number;
-  width?: number;
-  height?: number;
-  fill?: string;
-  index?: number;
-  radius?: number | number[];
-}) {
-  const { x = 0, y = 0, width = 0, height = 0, fill, index = 0 } = props;
+function renderBarShape(props: unknown) {
+  const {
+    x = 0,
+    y = 0,
+    width = 0,
+    height = 0,
+    fill,
+    index = 0,
+  } = (props as {
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    fill?: string;
+    index?: number;
+    radius?: number | number[];
+  });
   const delaySec = (index * BAR_ROLL_STAGGER_MS) / 1000;
   const durSec = BAR_ROLL_DURATION_MS / 1000;
   const bottomY = y + height;
@@ -183,8 +190,6 @@ export default function SystemStatus() {
 
   const v = data.vision;
   const history = data.history ?? [];
-  const detectorLabel =
-    v?.detector_device === "edgetpu" ? t("admin.detectorEdgetpu") : t("admin.detectorCpu");
   const detectorPillLabel = v?.detector_device === "edgetpu" ? "Coral Edge TPU" : "CPU (ONNX)";
   const displayedModelPath = v?.active_model_path;
 
