@@ -112,9 +112,29 @@ Docker 執行四個服務：**frontend**（port 3000）、**backend**、**vision
 
 ## 偵測模型
 
-視覺服務需要 ONNX 模型才能回報風箏計數；沒有模型時計數會維持 0。
+視覺服務需要偵測模型才能回報風箏計數；沒有模型時計數會維持 0。
 
-請上傳 **class 0 為風箏** 的模型（例如以風箏資料集訓練 YOLOv8 後匯出為 ONNX）。在管理後台前往 **設定 → 偵測模型**：上傳 ONNX 檔，或將檔案放入 vision 模型 volume 後在該頁選擇。信心度等選項可在同頁設定。
+- **CPU 路徑（預設）**：上傳 **ONNX** 模型，且 **class 0 為風箏**。
+- **Coral Edge TPU（選用）**：上傳 **已編譯給 Edge TPU 使用的 TFLite 模型**。當選擇 `.tflite` 模型且偵測到 Coral TPU 時，推論會在 TPU 上執行。
+
+在管理後台前往 **設定 → 偵測模型**：上傳模型檔（CPU 用 .onnx、Coral 用 .tflite），或將檔案放入 vision 模型 volume 後在該頁選擇。信心門檻等選項可在同頁設定。
+
+若要查看完整的匯出、量化與 Coral 編譯流程，請參考 [`vision/scripts/README.md`](vision/scripts/README.md)。
+
+### Coral Edge TPU（選用）
+
+KiteScope 可將偵測工作 offload 到 Google Coral Edge TPU：
+
+- **模型**：使用適用於 Edge TPU 的 YOLO 類模型，且 **class 0 為風箏**。
+- **Docker 設定**（以 USB Coral 為例，vision 服務）：
+  - 在 `docker-compose.yml`／`docker-compose.dev.yml` 中取消註解：
+    - `- /dev/bus/usb:/dev/bus/usb`
+- **環境變數**：
+  - `DETECT_DEVICE=auto`（預設）：偵測到 Coral 即使用 TPU，否則用 CPU。
+  - `DETECT_DEVICE=cpu`：強制使用 CPU ONNX 後端。
+  - `DETECT_DEVICE=edgetpu`：強制使用 Coral（若無 TPU 則回退到 CPU）。
+
+要確認目前實際使用的後端，可進入 **管理後台 → 儀表板**，查看 **System status** 卡片：會顯示偵測器是 **CPU (ONNX)** 還是 **Coral Edge TPU**，以及是否偵測到 TPU。
 
 ---
 

@@ -13,12 +13,14 @@ import BackupRestore from "./BackupRestore";
 import UserList from "./UserList";
 import Broadcast from "./Broadcast";
 import NotifyFormatSettings from "./NotifyFormatSettings";
+import SystemStatus from "./SystemStatus";
 
 function AdminDashboard() {
   const { t } = useI18n();
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 sm:space-y-6">
       <h2 className="font-gaming text-xl font-semibold text-text-primary">{t("admin.dashboard")}</h2>
+      <SystemStatus />
       <PendingSources />
       <Broadcast />
       <NotifyFormatSettings />
@@ -29,7 +31,7 @@ function AdminDashboard() {
 function AdminSettings() {
   const { t } = useI18n();
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 sm:space-y-6">
       <h2 className="font-gaming text-xl font-semibold text-text-primary">{t("admin.settings")}</h2>
       <ChangePassword />
       <BotSettings />
@@ -168,8 +170,8 @@ export default function AdminLayout() {
           </div>
         )}
       </header>
-      <main className="min-h-0 flex-1 overflow-y-auto px-4 py-8">
-        <div className="mx-auto max-w-6xl">
+      <main className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:py-8">
+        <div className="mx-auto max-w-6xl min-w-0">
           <Routes>
             <Route index element={<AdminDashboard />} />
             <Route path="sources" element={<ManageSources />} />

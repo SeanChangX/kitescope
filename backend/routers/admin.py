@@ -20,6 +20,10 @@ from secret_config import get_internal_secret
 
 router = APIRouter()
 
+# Vision stats history (last 60 points, 1 per minute). Persisted in backend so refresh keeps history.
+_VISION_STATS_HISTORY: list[dict] = []
+_VISION_HISTORY_MAX = 60
+
 # Unicode dash/minus variants that break NVR auth (e.g. pass=); normalize to ASCII hyphen
 _UNICODE_DASHES = re.compile("[\u2010\u2011\u2012\u2013\u2014\u2212\uff0d]")
 
@@ -450,11 +454,11 @@ SELECTED_MODEL_FILE = ".selected"  # Filename under MODELS_DIR; vision reads thi
 VISION_SELECTED_MODEL_KEY = "vision_selected_model"
 VISION_CONFIDENCE_THRESHOLD_KEY = "vision_confidence_threshold"
 
-_ALLOWED_MODEL_NAME = re.compile(r"^[a-zA-Z0-9_.-]+\.onnx$")
+_ALLOWED_MODEL_NAME = re.compile(r"^[a-zA-Z0-9_.-]+\.(onnx|tflite)$")
 
 
 def _safe_model_filename(name: str) -> str | None:
-    """Return basename if it matches allowed pattern else None."""
+    """Return basename if it matches allowed pattern (.onnx or .tflite) else None."""
     base = os.path.basename(name).strip()
     return base if _ALLOWED_MODEL_NAME.match(base) else None
 
@@ -465,10 +469,11 @@ def _models_dir_ensure() -> str:
 
 
 def _list_model_filenames() -> list[str]:
-    """Return sorted list of .onnx filenames in MODELS_DIR. Best-effort."""
+    """Return sorted list of .onnx and .tflite filenames in MODELS_DIR. Best-effort."""
     try:
         names = [f for f in os.listdir(MODELS_DIR)
-                 if f.endswith(".onnx") and _ALLOWED_MODEL_NAME.match(f) and os.path.isfile(os.path.join(MODELS_DIR, f))]
+                 if (f.endswith(".onnx") or f.endswith(".tflite")) and _ALLOWED_MODEL_NAME.match(f)
+                 and os.path.isfile(os.path.join(MODELS_DIR, f))]
         names.sort()
         return names
     except OSError:
@@ -480,12 +485,12 @@ async def get_models(
     db: AsyncSession = Depends(get_db),
     _: None = Depends(_admin_only),
 ):
-    """List uploaded .onnx model filenames, current selection, and confidence threshold."""
+    """List uploaded .onnx and .tflite model filenames, current selection, and confidence threshold."""
     _models_dir_ensure()
     models = []
     try:
         for f in os.listdir(MODELS_DIR):
-            if f.endswith(".onnx") and _ALLOWED_MODEL_NAME.match(f):
+            if (f.endswith(".onnx") or f.endswith(".tflite")) and _ALLOWED_MODEL_NAME.match(f):
                 models.append(f)
     except OSError:
         pass
@@ -523,11 +528,11 @@ async def upload_model(
     file: UploadFile = File(...),
     _: None = Depends(_admin_only),
 ):
-    """Upload an ONNX model file. Returns new filename (may be uniquified)."""
+    """Upload an ONNX or TFLite model file. Returns new filename (may be uniquified)."""
     _models_dir_ensure()
     name = _safe_model_filename(file.filename or "")
     if not name:
-        raise HTTPException(status_code=400, detail="Invalid or missing filename; use a .onnx file")
+        raise HTTPException(status_code=400, detail="Invalid or missing filename; use a .onnx or .tflite file")
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Empty file")
@@ -557,16 +562,15 @@ async def delete_model(
     path = os.path.join(MODELS_DIR, safe)
     if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Model not found")
+    r = await db.execute(select(BotConfig).where(BotConfig.key == VISION_SELECTED_MODEL_KEY))
+    row = r.scalar_one_or_none()
+    selected = (row.value or "").strip() if row else ""
+    if selected == safe:
+        raise HTTPException(status_code=409, detail="Cannot delete the model currently in use")
     try:
         os.remove(path)
     except OSError as e:
         raise HTTPException(status_code=500, detail=str(e))
-    r = await db.execute(select(BotConfig).where(BotConfig.key == VISION_SELECTED_MODEL_KEY))
-    row = r.scalar_one_or_none()
-    if row and (row.value or "").strip() == safe:
-        row.value = ""
-        row.updated_at = datetime.utcnow()
-        await db.flush()
     return {"message": "Deleted"}
 
 
@@ -583,6 +587,17 @@ async def put_model_selected(
 ):
     """Set selected model and/or confidence threshold; tell vision to apply. Empty selected clears selection."""
     import httpx
+
+    def _model_arch(name: str | None) -> str | None:
+        if not name:
+            return None
+        lower = name.lower()
+        if lower.endswith(".onnx"):
+            return "onnx"
+        if lower.endswith(".tflite"):
+            return "tflite"
+        return None
+
     selected = (body.selected or "").strip() or None
     confidence_threshold = body.confidence_threshold
     if selected:
@@ -596,6 +611,9 @@ async def put_model_selected(
     now = datetime.utcnow()
     r = await db.execute(select(BotConfig).where(BotConfig.key == VISION_SELECTED_MODEL_KEY))
     row = r.scalar_one_or_none()
+    previous_selected = (row.value or "").strip() if row else ""
+    previous_arch = _model_arch(previous_selected or None)
+    selected_arch = _model_arch(selected)
     if row:
         row.value = selected or ""
         row.updated_at = now
@@ -604,14 +622,7 @@ async def put_model_selected(
     await db.flush()
     vision_url = os.getenv("VISION_URL", "http://vision:9000").rstrip("/")
     secret = get_internal_secret()
-    # Persist selection to a file so vision applies it on restart (vision does not read DB)
-    _models_dir_ensure()
-    selected_file_path = os.path.join(MODELS_DIR, SELECTED_MODEL_FILE)
-    try:
-        with open(selected_file_path, "w") as f:
-            f.write(selected or "")
-    except OSError:
-        pass  # Best-effort; vision may still get selection via reload-model below
+    switching = bool(selected and selected != previous_selected)
     if selected:
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -646,7 +657,73 @@ async def put_model_selected(
                     raise HTTPException(status_code=502, detail="Vision config update failed: " + (r.text or str(r.status_code)))
         except httpx.RequestError as e:
             raise HTTPException(status_code=502, detail="Vision service unreachable: " + str(e))
-    return {"message": "Saved and applied" if (selected or confidence_threshold is not None) else "Saved"}
+    # Persist selection only after runtime apply succeeds so the restart file does
+    # not get ahead of the DB transaction on failure.
+    _models_dir_ensure()
+    selected_file_path = os.path.join(MODELS_DIR, SELECTED_MODEL_FILE)
+    try:
+        with open(selected_file_path, "w") as f:
+            f.write(selected or "")
+    except OSError as e:
+        raise HTTPException(status_code=500, detail="Failed to persist selected model: " + str(e))
+    return {
+        "message": "Saved and switching" if switching else ("Saved and applied" if (selected or confidence_threshold is not None) else "Saved"),
+        "switching": switching,
+        "selected": selected or "",
+        "selected_architecture": selected_arch,
+        "previous_architecture": previous_arch,
+    }
+
+
+@router.get("/system/status")
+async def get_system_status(_: None = Depends(_admin_only)):
+    """Return vision service config, detector status, and persisted stats history for admin system page."""
+    import httpx
+    global _VISION_STATS_HISTORY
+    vision_url = os.getenv("VISION_URL", "http://vision:9000").rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(f"{vision_url}/config")
+            if r.status_code != 200:
+                return {
+                    "vision_reachable": False,
+                    "vision_error": r.text or str(r.status_code),
+                    "vision": None,
+                    "history": _VISION_STATS_HISTORY[-_VISION_HISTORY_MAX:],
+                }
+            try:
+                data = r.json()
+            except Exception as e:
+                return {
+                    "vision_reachable": False,
+                    "vision_error": f"Invalid JSON: {e!s}",
+                    "vision": None,
+                    "history": _VISION_STATS_HISTORY[-_VISION_HISTORY_MAX:],
+                }
+            # Append at most once per minute so history persists across page refreshes
+            now_ms = round(datetime.utcnow().timestamp() * 1000)
+            if not _VISION_STATS_HISTORY or (now_ms - _VISION_STATS_HISTORY[-1]["t"]) >= 50_000:
+                snapshot = {
+                    "t": now_ms,
+                    "inference_speed_ms": data.get("inference_speed_ms"),
+                    "cpu_percent": data.get("cpu_percent"),
+                    "memory_percent": data.get("memory_percent"),
+                }
+                _VISION_STATS_HISTORY.append(snapshot)
+                if len(_VISION_STATS_HISTORY) > _VISION_HISTORY_MAX:
+                    _VISION_STATS_HISTORY = _VISION_STATS_HISTORY[-_VISION_HISTORY_MAX:]
+            return {
+                "vision_reachable": True,
+                "vision": data,
+                "history": _VISION_STATS_HISTORY,
+            }
+    except httpx.RequestError as e:
+        return {
+            "vision_reachable": False,
+            "vision_error": str(e),
+            "vision": None,
+            "history": _VISION_STATS_HISTORY[-_VISION_HISTORY_MAX:],
+        }
 
 
 class BotSettingsBody(BaseModel):

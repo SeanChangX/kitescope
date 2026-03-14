@@ -62,12 +62,23 @@ services:
       - ./vision:/app
       - kitescope_data:/app/data
       - vision_models:/app/models
+      # Coral USB TPU access without full privileged mode.
+      - /dev/bus/usb:/dev/bus/usb
+      # Optional: mount host USB sysfs for hardware presence detection if needed.
+      # - /sys/bus/usb/devices:/sys/bus/usb/devices:ro
+      # For PCIe/M.2 TPU, map the specific device instead:
+      # - /dev/apex_0:/dev/apex_0
+    device_cgroup_rules:
+      - "c 189:* rmw"
     environment:
       - GO2RTC_BASE_URL=http://go2rtc:1984
       - BACKEND_URL=http://backend:8000
       - INTERNAL_SECRET_FILE=/app/data/internal_secret
       - MODELS_DIR=/app/models
       - VISION_LOOP_INTERVAL_SEC=5
+      - VISION_LOG_LEVEL=INFO
+      # Detector: auto = use Coral if detected else CPU; cpu = force CPU; edgetpu = force Coral
+      - DETECT_DEVICE=${DETECT_DEVICE:-auto}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/health')"]
       interval: 15s
