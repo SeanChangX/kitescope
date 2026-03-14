@@ -49,7 +49,7 @@ COPY --from=libusb-no-udev /usr/local/lib/libusb-1.0.so* /usr/local/lib/
 # The official Google libedgetpu from coral-edgetpu-stable (RuntimeVersion 14, TF 2.5 era)
 # is INCOMPATIBLE with tflite_runtime >= 2.12: the delegate loads but silently fails to
 # handle custom ops at invoke() time.  See https://github.com/google-coral/edgetpu/issues/812
-# Using libedgetpu1-max (same as Frigate) for full Edge TPU clock speed.
+# Using libedgetpu1-max for full Edge TPU clock speed.
 # python:3.11-slim is now based on Debian trixie; use matching deb.
 # dpkg -x extracts files without running maintainer scripts (avoids EULA prompt
 # that fails in Docker where no debconf frontend is available).
@@ -82,7 +82,7 @@ ENV PYTHONUNBUFFERED=1
 # Without this, the system libusb (pulled as transitive dep by ffmpeg/curl) in
 # /usr/lib/x86_64-linux-gnu/ takes precedence and crashes with USB error 5.
 ENV LD_PRELOAD=/usr/local/lib/libusb-1.0.so.0
-# Suppress noisy TFLite / GLOG native logs (same as Frigate).
+# Suppress noisy TFLite / GLOG native logs.
 ENV TF_CPP_MIN_LOG_LEVEL=3
 ENV GLOG_minloglevel=2
 

@@ -622,14 +622,6 @@ async def put_model_selected(
     await db.flush()
     vision_url = os.getenv("VISION_URL", "http://vision:9000").rstrip("/")
     secret = get_internal_secret()
-    # Persist selection to a file so vision applies it on restart (vision does not read DB)
-    _models_dir_ensure()
-    selected_file_path = os.path.join(MODELS_DIR, SELECTED_MODEL_FILE)
-    try:
-        with open(selected_file_path, "w") as f:
-            f.write(selected or "")
-    except OSError:
-        pass  # Best-effort; vision may still get selection via reload-model below
     switching = bool(selected and selected != previous_selected)
     if selected:
         try:
@@ -665,6 +657,15 @@ async def put_model_selected(
                     raise HTTPException(status_code=502, detail="Vision config update failed: " + (r.text or str(r.status_code)))
         except httpx.RequestError as e:
             raise HTTPException(status_code=502, detail="Vision service unreachable: " + str(e))
+    # Persist selection only after runtime apply succeeds so the restart file does
+    # not get ahead of the DB transaction on failure.
+    _models_dir_ensure()
+    selected_file_path = os.path.join(MODELS_DIR, SELECTED_MODEL_FILE)
+    try:
+        with open(selected_file_path, "w") as f:
+            f.write(selected or "")
+    except OSError as e:
+        raise HTTPException(status_code=500, detail="Failed to persist selected model: " + str(e))
     return {
         "message": "Saved and switching" if switching else ("Saved and applied" if (selected or confidence_threshold is not None) else "Saved"),
         "switching": switching,
