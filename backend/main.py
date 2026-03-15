@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from database import init_db, AsyncSessionLocal
 from routers import public, admin, auth, internal, user_notifications
+from routers.admin import sync_selected_model_file_from_db
 from routers.internal import prune_count_history_by_retention
 from routers.public import close_vision_client, warm_preview_cache
 from notification_worker import start_worker
@@ -21,6 +22,12 @@ from secret_config import (
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    # Sync DB model selection to MODELS_DIR/.selected so vision applies it on startup
+    try:
+        async with AsyncSessionLocal() as session:
+            await sync_selected_model_file_from_db(session)
+    except Exception:
+        pass
     # SECRET_KEY: use env, or get/create from DB (auto-generated on first run; backup carries it)
     effective = os.getenv("SECRET_KEY", "").strip()
     if not effective:

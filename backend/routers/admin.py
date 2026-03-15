@@ -480,6 +480,28 @@ def _list_model_filenames() -> list[str]:
         return []
 
 
+async def sync_selected_model_file_from_db(session: AsyncSession) -> None:
+    """Write vision_selected_model from DB to MODELS_DIR/.selected so vision applies it on startup.
+    Call once at backend startup so vision (which starts after backend) sees the file."""
+    if not MODELS_DIR.strip():
+        return
+    try:
+        r = await session.execute(select(BotConfig).where(BotConfig.key == VISION_SELECTED_MODEL_KEY))
+        row = r.scalar_one_or_none()
+        selected = (row.value or "").strip() if row else ""
+        if not selected:
+            return
+        models = _list_model_filenames()
+        if selected not in models:
+            return
+        _models_dir_ensure()
+        selected_file_path = os.path.join(MODELS_DIR, SELECTED_MODEL_FILE)
+        with open(selected_file_path, "w") as f:
+            f.write(selected)
+    except OSError:
+        pass
+
+
 @router.get("/settings/models")
 async def get_models(
     db: AsyncSession = Depends(get_db),
@@ -1166,14 +1188,17 @@ async def restore_settings(
             row.updated_at = now
         else:
             db.add(BotConfig(key=VISION_CONFIDENCE_THRESHOLD_KEY, value=v, updated_at=now))
-    # Sync .selected so vision uses this model name after user re-uploads the file
+    # Sync .selected only when the selected model file exists, so vision does not try to load a missing file
+    # (e.g. user restored before uploading models). DB keeps the name so after re-upload the selection applies.
     selected = data.get("vision_selected_model")
     if isinstance(selected, str) and _safe_model_filename(selected.strip()):
-        try:
-            _models_dir_ensure()
-            with open(os.path.join(MODELS_DIR, SELECTED_MODEL_FILE), "w") as fp:
-                fp.write(selected.strip())
-        except OSError:
-            pass
+        selected = selected.strip()
+        if selected in _list_model_filenames():
+            try:
+                _models_dir_ensure()
+                with open(os.path.join(MODELS_DIR, SELECTED_MODEL_FILE), "w") as fp:
+                    fp.write(selected)
+            except OSError:
+                pass
     await db.flush()
     return {"message": "Restored"}
