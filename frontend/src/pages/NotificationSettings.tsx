@@ -42,37 +42,52 @@ export default function NotificationSettings() {
   const [adding, setAdding] = useState(false);
   const [message, setMessage] = useState("");
   const [lineAddFriendUrl, setLineAddFriendUrl] = useState("");
+  const [togglingMap, setTogglingMap] = useState<Record<number, boolean>>({});
 
-  function load() {
-    setLoading(true);
+  async function load(options?: { showLoading?: boolean }) {
+    if (options?.showLoading) setLoading(true);
     setUnauth(false);
-    Promise.all([
-      userFetch(`${API}/notifications/subscriptions`),
-      fetch(`${API}/sources`),
-      userFetch(`${API}/auth/me`),
-      fetch(`${API}/auth/line/add-friend-url`),
-    ])
-      .then(([rSubs, rSources, rMe, rLineUrl]) => {
-        if (rSubs.status === 401) {
-          setUnauth(true);
-          return;
-        }
-        if (rSubs.ok) rSubs.json().then(setSubs).catch(() => setSubs([]));
-        if (rSources.ok) rSources.json().then(setSources).catch(() => setSources([]));
-        if (rMe?.ok && rLineUrl?.ok) {
-          Promise.all([rMe.json(), rLineUrl.json()]).then(
-            ([me, lineUrl]: [{ line_id?: boolean }, { url?: string }]) => {
-              if (me.line_id && lineUrl.url) setLineAddFriendUrl(lineUrl.url);
-            }
-          ).catch(() => {});
-        }
-      })
-      .catch(() => setSubs([]))
-      .finally(() => setLoading(false));
+    try {
+      const [rSubs, rSources, rMe, rLineUrl] = await Promise.all([
+        userFetch(`${API}/notifications/subscriptions`),
+        fetch(`${API}/sources`),
+        userFetch(`${API}/auth/me`),
+        fetch(`${API}/auth/line/add-friend-url`),
+      ]);
+
+      if (rSubs.status === 401) {
+        setUnauth(true);
+        return;
+      }
+
+      if (rSubs.ok) {
+        const nextSubs = await rSubs.json().catch(() => []);
+        setSubs(Array.isArray(nextSubs) ? nextSubs : []);
+      } else {
+        setSubs([]);
+      }
+
+      if (rSources.ok) {
+        const nextSources = await rSources.json().catch(() => []);
+        setSources(Array.isArray(nextSources) ? nextSources : []);
+      }
+
+      if (rMe?.ok && rLineUrl?.ok) {
+        const [me, lineUrl] = await Promise.all([
+          rMe.json().catch(() => ({})),
+          rLineUrl.json().catch(() => ({})),
+        ]) as [{ line_id?: boolean }, { url?: string }];
+        if (me.line_id && lineUrl.url) setLineAddFriendUrl(lineUrl.url);
+      }
+    } catch {
+      setSubs([]);
+    } finally {
+      if (options?.showLoading) setLoading(false);
+    }
   }
 
   useEffect(() => {
-    load();
+    void load({ showLoading: true });
   }, []);
 
   async function addSub(e: React.FormEvent) {
@@ -92,7 +107,7 @@ export default function NotificationSettings() {
     const data = await r.json().catch(() => ({}));
     setAdding(false);
     if (r.ok) {
-      load();
+      await load();
       setNewSourceId("");
       setMessage(t("notifications.subscribed"));
     } else {
@@ -101,18 +116,41 @@ export default function NotificationSettings() {
   }
 
   async function toggleEnabled(sub: Sub) {
-    const r = await userFetch(`${API}/notifications/subscriptions/${sub.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ enabled: !sub.enabled }),
-    });
-    if (r.ok) load();
+    if (togglingMap[sub.id]) return;
+    const nextEnabled = !sub.enabled;
+    setTogglingMap((prev) => ({ ...prev, [sub.id]: true }));
+    setSubs((prev) => prev.map((s) => (s.id === sub.id ? { ...s, enabled: nextEnabled } : s)));
+    try {
+      const r = await userFetch(`${API}/notifications/subscriptions/${sub.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: nextEnabled }),
+      });
+      if (!r.ok) {
+        setSubs((prev) => prev.map((s) => (s.id === sub.id ? { ...s, enabled: sub.enabled } : s)));
+        setMessage(t("notifications.failed"));
+      }
+    } catch {
+      setSubs((prev) => prev.map((s) => (s.id === sub.id ? { ...s, enabled: sub.enabled } : s)));
+      setMessage(t("notifications.failed"));
+    } finally {
+      setTogglingMap((prev) => {
+        const next = { ...prev };
+        delete next[sub.id];
+        return next;
+      });
+    }
   }
 
   async function remove(subId: number) {
     if (!confirm(t("notifications.removeSubscriptionConfirm"))) return;
+    const snapshot = subs;
+    setSubs((prev) => prev.filter((s) => s.id !== subId));
     const r = await userFetch(`${API}/notifications/subscriptions/${subId}`, { method: "DELETE" });
-    if (r.ok) load();
+    if (!r.ok) {
+      setSubs(snapshot);
+      setMessage(t("notifications.failed"));
+    }
   }
 
   if (unauth) {
@@ -238,11 +276,12 @@ export default function NotificationSettings() {
                     <button
                       type="button"
                       onClick={() => toggleEnabled(sub)}
+                      disabled={!!togglingMap[sub.id]}
                       className={`ks-btn w-20 py-1.5 text-sm ${
                         sub.enabled
                           ? "ks-btn-secondary"
                           : "bg-ks-success/20 text-ks-success hover:bg-ks-success/30 hover:text-white"
-                      }`}
+                      } ${togglingMap[sub.id] ? "opacity-60 cursor-not-allowed" : ""}`}
                     >
                       {sub.enabled ? t("notifications.on") : t("notifications.off")}
                     </button>

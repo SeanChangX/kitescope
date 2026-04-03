@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from database import init_db, AsyncSessionLocal
 from routers import public, admin, auth, internal, user_notifications
-from routers.admin import sync_selected_model_file_from_db
+from routers.admin import sync_selected_model_file_from_db, collect_vision_stats_once
 from routers.internal import prune_count_history_by_retention
 from routers.public import close_vision_client, warm_preview_cache
 from notification_worker import start_worker
@@ -44,6 +44,18 @@ async def lifespan(app: FastAPI):
             "INTERNAL_SECRET_FILE is set but secret could not be read. Fix file path or set INTERNAL_SECRET."
         )
     task = start_worker()
+
+    async def _collect_vision_stats_loop() -> None:
+        while True:
+            try:
+                await collect_vision_stats_once()
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                pass
+            await asyncio.sleep(60)
+
+    vision_stats_task = asyncio.create_task(_collect_vision_stats_loop())
 
     # Prune count_history on startup (older than retention_days)
     try:
@@ -84,6 +96,11 @@ async def lifespan(app: FastAPI):
         pass
     if task is not None and not task.done():
         task.cancel()
+    vision_stats_task.cancel()
+    try:
+        await vision_stats_task
+    except asyncio.CancelledError:
+        pass
 
 
 app = FastAPI(

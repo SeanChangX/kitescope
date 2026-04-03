@@ -135,19 +135,21 @@ interface SystemStatusResponse {
   vision_error?: string;
   vision: VisionConfig | null;
   history?: HistoryPoint[];
+  history_interval_sec?: number;
+  history_points_max?: number;
 }
 
 const STATUS_REFRESH_INTERVAL_MS = 60_000;
-const CHART_SLOTS = 60;
+const DEFAULT_HISTORY_SLOTS = 60;
 
-function buildChartData(history: HistoryPoint[]) {
+function buildChartData(history: HistoryPoint[], slots: number) {
   const filled = history.map((p) => ({
     time: new Date(p.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     inference: p.inference_speed_ms ?? null,
     cpu: p.cpu_percent ?? null,
     memory: p.memory_percent ?? null,
   }));
-  const pad = Math.max(0, CHART_SLOTS - filled.length);
+  const pad = Math.max(0, slots - filled.length);
   const empty = Array(pad).fill(null).map(() => ({
     time: "",
     inference: null as number | null,
@@ -193,7 +195,8 @@ export default function SystemStatus() {
   const detectorPillLabel = v?.detector_device === "edgetpu" ? "Coral Edge TPU" : "CPU (ONNX)";
   const displayedModelPath = v?.active_model_path;
 
-  const chartData = buildChartData(history);
+  const historyPointsMax = Math.max(1, Math.round(data.history_points_max ?? DEFAULT_HISTORY_SLOTS));
+  const chartData = buildChartData(history, historyPointsMax);
   const hasAnyBars = chartData.some((r) => r.inference != null || r.cpu != null || r.memory != null);
 
   const currentInference = v?.inference_speed_ms != null && v.inference_speed_ms > 0 ? v.inference_speed_ms : null;

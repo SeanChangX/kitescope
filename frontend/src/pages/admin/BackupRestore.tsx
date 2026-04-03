@@ -4,27 +4,35 @@ import { useI18n } from "../../lib/i18n";
 
 export default function BackupRestore() {
   const { t } = useI18n();
+  const [backupLoading, setBackupLoading] = useState(false);
   const [restoreLoading, setRestoreLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function downloadBackup() {
     setMessage(null);
-    const r = await authFetch("/api/admin/settings/backup");
-    if (!r.ok) {
+    setBackupLoading(true);
+    try {
+      const r = await authFetch("/api/admin/settings/backup");
+      if (!r.ok) {
+        setMessage(t("admin.backupFailed"));
+        return;
+      }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const disp = r.headers.get("Content-Disposition");
+      const match = disp?.match(/filename=(.+)/);
+      a.download = match ? match[1].trim().replace(/^["']|["']$/g, "") : `kitescope-backup-${new Date().toISOString().slice(0, 10)}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setMessage(t("admin.backupDownloaded"));
+    } catch {
       setMessage(t("admin.backupFailed"));
-      return;
+    } finally {
+      setBackupLoading(false);
     }
-    const blob = await r.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    const disp = r.headers.get("Content-Disposition");
-    const match = disp?.match(/filename=(.+)/);
-    a.download = match ? match[1].trim().replace(/^["']|["']$/g, "") : `kitescope-backup-${new Date().toISOString().slice(0, 10)}.zip`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setMessage(t("admin.backupDownloaded"));
   }
 
   async function restore(e: React.ChangeEvent<HTMLInputElement>) {
@@ -63,9 +71,17 @@ export default function BackupRestore() {
         <button
           type="button"
           onClick={downloadBackup}
-          className="ks-btn ks-btn-secondary"
+          disabled={backupLoading}
+          className={`ks-btn ks-btn-secondary ${backupLoading ? "opacity-70 cursor-not-allowed" : ""}`}
         >
-          {t("admin.backupSettings")}
+          {backupLoading ? (
+            <span className="inline-flex items-center gap-2">
+              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-text-muted border-t-primary" />
+              {t("admin.backupPreparing")}
+            </span>
+          ) : (
+            t("admin.backupSettings")
+          )}
         </button>
         <label className="ks-btn ks-btn-primary cursor-pointer">
           <input

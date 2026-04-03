@@ -23,6 +23,8 @@ router = APIRouter()
 # Vision stats history (last 60 points, 1 per minute). Persisted in backend so refresh keeps history.
 _VISION_STATS_HISTORY: list[dict] = []
 _VISION_HISTORY_MAX = 60
+_VISION_HISTORY_INTERVAL_SEC = 60
+_VISION_HISTORY_MIN_GAP_MS = 58_000
 
 # Unicode dash/minus variants that break NVR auth (e.g. pass=); normalize to ASCII hyphen
 _UNICODE_DASHES = re.compile("[\u2010\u2011\u2012\u2013\u2014\u2212\uff0d]")
@@ -700,52 +702,65 @@ async def put_model_selected(
 @router.get("/system/status")
 async def get_system_status(_: None = Depends(_admin_only)):
     """Return vision service config, detector status, and persisted stats history for admin system page."""
-    import httpx
     global _VISION_STATS_HISTORY
+    vision_reachable, data, error = await _fetch_vision_config()
+    if vision_reachable and data is not None:
+        _append_vision_stats_snapshot(data)
+        return {
+            "vision_reachable": True,
+            "vision": data,
+            "history": _VISION_STATS_HISTORY[-_VISION_HISTORY_MAX:],
+            "history_interval_sec": _VISION_HISTORY_INTERVAL_SEC,
+            "history_points_max": _VISION_HISTORY_MAX,
+        }
+    return {
+        "vision_reachable": False,
+        "vision_error": error,
+        "vision": None,
+        "history": _VISION_STATS_HISTORY[-_VISION_HISTORY_MAX:],
+        "history_interval_sec": _VISION_HISTORY_INTERVAL_SEC,
+        "history_points_max": _VISION_HISTORY_MAX,
+    }
+
+
+async def _fetch_vision_config() -> tuple[bool, dict | None, str | None]:
+    import httpx
     vision_url = os.getenv("VISION_URL", "http://vision:9000").rstrip("/")
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             r = await client.get(f"{vision_url}/config")
             if r.status_code != 200:
-                return {
-                    "vision_reachable": False,
-                    "vision_error": r.text or str(r.status_code),
-                    "vision": None,
-                    "history": _VISION_STATS_HISTORY[-_VISION_HISTORY_MAX:],
-                }
+                return False, None, r.text or str(r.status_code)
             try:
                 data = r.json()
             except Exception as e:
-                return {
-                    "vision_reachable": False,
-                    "vision_error": f"Invalid JSON: {e!s}",
-                    "vision": None,
-                    "history": _VISION_STATS_HISTORY[-_VISION_HISTORY_MAX:],
-                }
-            # Append at most once per minute so history persists across page refreshes
-            now_ms = round(datetime.utcnow().timestamp() * 1000)
-            if not _VISION_STATS_HISTORY or (now_ms - _VISION_STATS_HISTORY[-1]["t"]) >= 50_000:
-                snapshot = {
-                    "t": now_ms,
-                    "inference_speed_ms": data.get("inference_speed_ms"),
-                    "cpu_percent": data.get("cpu_percent"),
-                    "memory_percent": data.get("memory_percent"),
-                }
-                _VISION_STATS_HISTORY.append(snapshot)
-                if len(_VISION_STATS_HISTORY) > _VISION_HISTORY_MAX:
-                    _VISION_STATS_HISTORY = _VISION_STATS_HISTORY[-_VISION_HISTORY_MAX:]
-            return {
-                "vision_reachable": True,
-                "vision": data,
-                "history": _VISION_STATS_HISTORY,
-            }
+                return False, None, f"Invalid JSON: {e!s}"
+            return True, data, None
     except httpx.RequestError as e:
-        return {
-            "vision_reachable": False,
-            "vision_error": str(e),
-            "vision": None,
-            "history": _VISION_STATS_HISTORY[-_VISION_HISTORY_MAX:],
-        }
+        return False, None, str(e)
+
+
+def _append_vision_stats_snapshot(data: dict) -> None:
+    global _VISION_STATS_HISTORY
+    now_ms = round(datetime.utcnow().timestamp() * 1000)
+    if _VISION_STATS_HISTORY and (now_ms - _VISION_STATS_HISTORY[-1]["t"]) < _VISION_HISTORY_MIN_GAP_MS:
+        return
+    snapshot = {
+        "t": now_ms,
+        "inference_speed_ms": data.get("inference_speed_ms"),
+        "cpu_percent": data.get("cpu_percent"),
+        "memory_percent": data.get("memory_percent"),
+    }
+    _VISION_STATS_HISTORY.append(snapshot)
+    if len(_VISION_STATS_HISTORY) > _VISION_HISTORY_MAX:
+        _VISION_STATS_HISTORY = _VISION_STATS_HISTORY[-_VISION_HISTORY_MAX:]
+
+
+async def collect_vision_stats_once() -> None:
+    """Sample vision runtime stats once and append to in-memory history."""
+    vision_reachable, data, _error = await _fetch_vision_config()
+    if vision_reachable and data is not None:
+        _append_vision_stats_snapshot(data)
 
 
 class BotSettingsBody(BaseModel):
