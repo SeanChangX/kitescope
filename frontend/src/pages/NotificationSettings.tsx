@@ -279,8 +279,8 @@ export default function NotificationSettings() {
                       disabled={!!togglingMap[sub.id]}
                       className={`ks-btn w-20 py-1.5 text-sm ${
                         sub.enabled
-                          ? "ks-btn-secondary"
-                          : "bg-ks-success/20 text-ks-success hover:bg-ks-success/30 hover:text-white"
+                          ? "bg-ks-success/20 text-ks-success hover:bg-ks-success hover:text-bg-primary"
+                          : "ks-btn-secondary"
                       } ${togglingMap[sub.id] ? "opacity-60 cursor-not-allowed" : ""}`}
                     >
                       {sub.enabled ? t("notifications.on") : t("notifications.off")}

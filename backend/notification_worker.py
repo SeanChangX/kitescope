@@ -47,7 +47,10 @@ async def _run_once() -> None:
         for sub, user, source in subs_rows:
             count = latest_by_source.get(sub.source_id)
             release = sub.release_threshold if sub.release_threshold is not None else max(0, sub.threshold - 2)
-            if count is not None and count < release:
+            # release==0: count < 0 never true for real counts, so released_at never updated and
+            # re-notify is blocked forever (threshold 1 or 2). Use threshold as low-water mark.
+            low_water = release if release > 0 else sub.threshold
+            if count is not None and count < low_water:
                 sub.released_at = now
                 db.add(sub)
                 continue
