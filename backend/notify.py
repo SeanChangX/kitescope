@@ -71,11 +71,20 @@ async def send_line_message(channel_access_token: str, user_id: str, text: str) 
         return False
 
 
-async def send_telegram_message(bot_token: str, chat_id: str, text: str) -> bool:
+async def send_telegram_message(
+    bot_token: str,
+    chat_id: str,
+    text: str,
+    *,
+    http_client: httpx.AsyncClient | None = None,
+) -> bool:
     if not bot_token or not chat_id or not text.strip():
         return False
+    url = TELEGRAM_SEND_URL.format(token=bot_token)
     try:
-        url = TELEGRAM_SEND_URL.format(token=bot_token)
+        if http_client is not None:
+            r = await http_client.post(url, json={"chat_id": chat_id, "text": text[:4096]})
+            return r.status_code == 200
         async with httpx.AsyncClient(timeout=10.0) as client:
             r = await client.post(url, json={"chat_id": chat_id, "text": text[:4096]})
             return r.status_code == 200
@@ -83,16 +92,26 @@ async def send_telegram_message(bot_token: str, chat_id: str, text: str) -> bool
         return False
 
 
-async def send_telegram_photo(bot_token: str, chat_id: str, image_bytes: bytes, caption: str | None = None) -> bool:
+async def send_telegram_photo(
+    bot_token: str,
+    chat_id: str,
+    image_bytes: bytes,
+    caption: str | None = None,
+    *,
+    http_client: httpx.AsyncClient | None = None,
+) -> bool:
     if not bot_token or not chat_id or not image_bytes:
         return False
+    url = TELEGRAM_PHOTO_URL.format(token=bot_token)
+    files = {"photo": ("snapshot.jpg", image_bytes, "image/jpeg")}
+    data = {"chat_id": chat_id}
+    if caption:
+        data["caption"] = caption[:1024]
     try:
-        url = TELEGRAM_PHOTO_URL.format(token=bot_token)
+        if http_client is not None:
+            r = await http_client.post(url, data=data, files=files)
+            return r.status_code == 200
         async with httpx.AsyncClient(timeout=15.0) as client:
-            files = {"photo": ("snapshot.jpg", image_bytes, "image/jpeg")}
-            data = {"chat_id": chat_id}
-            if caption:
-                data["caption"] = caption[:1024]
             r = await client.post(url, data=data, files=files)
             return r.status_code == 200
     except Exception:
