@@ -31,11 +31,12 @@ class FrameResult:
 
 
 class BaseAdapter(ABC):
-    def __init__(self, url: str, source_id: str, interval_sec: int = 5, seek_offset_sec: float = 0):
+    def __init__(self, url: str, source_id: str, interval_sec: int = 5, seek_offset_sec: float = 0, verify_tls: bool = True):
         self.url = url
         self.source_id = source_id
         self.interval_sec = interval_sec
         self.seek_offset_sec = seek_offset_sec
+        self.verify_tls = verify_tls
 
     @abstractmethod
     async def fetch_frame(self) -> Optional[FrameResult]:

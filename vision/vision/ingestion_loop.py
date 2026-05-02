@@ -54,10 +54,11 @@ async def _process_one_source(s: dict, client: httpx.AsyncClient) -> None:
     url = s["url"]
     stype = detect_source_type(url)
     interval = s.get("pull_interval_sec", 5)
+    verify_tls = bool(s.get("verify_tls", True))
     async with _ingestion_semaphore:
         try:
             adapter_cls = get_adapter(stype)
-            adapter = adapter_cls(url=url, source_id=str(sid), interval_sec=interval)
+            adapter = adapter_cls(url=url, source_id=str(sid), interval_sec=interval, verify_tls=verify_tls)
             try:
                 frame_result = await adapter.fetch_frame()
                 if frame_result is None:

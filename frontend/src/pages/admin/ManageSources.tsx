@@ -11,6 +11,7 @@ type Source = {
   location: string;
   enabled: boolean;
   direct_embed?: boolean;
+  verify_tls?: boolean;
   url: string;
 };
 
@@ -23,6 +24,7 @@ export default function ManageSources() {
   const [editLocation, setEditLocation] = useState("");
   const [editEnabled, setEditEnabled] = useState(true);
   const [editDirectEmbed, setEditDirectEmbed] = useState(false);
+  const [editVerifyTls, setEditVerifyTls] = useState(true);
   const [editUrl, setEditUrl] = useState("");
 
   function load() {
@@ -44,6 +46,7 @@ export default function ManageSources() {
     setEditLocation(s.location || "");
     setEditEnabled(s.enabled);
     setEditDirectEmbed(s.direct_embed ?? false);
+    setEditVerifyTls(s.verify_tls ?? true);
     setEditUrl(s.url || "");
   }
 
@@ -61,6 +64,7 @@ export default function ManageSources() {
         location: editLocation,
         enabled: editEnabled,
         direct_embed: editDirectEmbed,
+        verify_tls: editVerifyTls,
         url: editUrl || undefined,
       }),
     });
@@ -143,6 +147,18 @@ export default function ManageSources() {
                           {t("admin.directEmbed")}
                         </span>
                         <span className="ml-7 block text-xs text-text-muted">{t("admin.directEmbedHint")}</span>
+                      </label>
+                      <label className="block cursor-pointer">
+                        <span className="flex items-center gap-2 text-sm text-text-secondary">
+                          <input
+                            type="checkbox"
+                            checked={editVerifyTls}
+                            onChange={(e) => setEditVerifyTls(e.target.checked)}
+                            className="ks-checkbox"
+                          />
+                          {t("admin.verifyTls")}
+                        </span>
+                        <span className="ml-7 block text-xs text-text-muted">{t("admin.verifyTlsHint")}</span>
                       </label>
                     </div>
                   </div>

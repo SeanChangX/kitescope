@@ -39,6 +39,12 @@ _fail_log_throttle: dict[str, float] = {}
 _fail_log_interval_sec = 300
 log = logging.getLogger("vision.app")
 
+# Silence per-request httpx INFO logs unless VISION_LOG_LEVEL=DEBUG, so the
+# default WARNING/INFO output isn't drowned by every backend heartbeat and
+# snapshot fetch. Set VISION_LOG_LEVEL=DEBUG to see full HTTP traffic.
+if (os.getenv("VISION_LOG_LEVEL", "WARNING").upper() != "DEBUG"):
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
 
 def _apply_saved_model_selection() -> None:
     """On startup, apply model selection from MODELS_DIR/.selected (written by backend on save)."""
@@ -210,8 +216,8 @@ async def reload_model_endpoint(
 
 
 @app.get("/snapshot")
-async def snapshot(url: str = "", overlay: bool = False, t: str = ""):
-    """Fetch one frame from stream URL and return as JPEG. overlay=1 draws detection boxes. t=tick for YouTube seek (sec = tick*5)."""
+async def snapshot(url: str = "", overlay: bool = False, t: str = "", verify_tls: str = "1"):
+    """Fetch one frame from stream URL and return as JPEG. overlay=1 draws detection boxes. t=tick for YouTube seek (sec = tick*5). verify_tls=0 disables TLS cert verification (only for trusted sources with expired certs)."""
     if not url:
         raise HTTPException(status_code=400, detail="url required")
     from fastapi.responses import Response
@@ -223,24 +229,25 @@ async def snapshot(url: str = "", overlay: bool = False, t: str = ""):
     except (ValueError, TypeError):
         tick = 0
     seek_sec = max(0, tick * 5)
+    verify = (verify_tls or "1").strip() not in ("0", "false", "False", "no", "")
     try:
         p = urlparse(url)
         url_safe = f"{p.scheme}://{p.netloc}{p.path or '/'}" if p.netloc else url[:60]
     except Exception:
         url_safe = url[:60] if url else ""
     async with _snapshot_semaphore:
-        log.info("snapshot request url=%s overlay=%s seek_sec=%s", url_safe, overlay, seek_sec)
+        log.debug("snapshot request url=%s overlay=%s seek_sec=%s verify_tls=%s", url_safe, overlay, seek_sec, verify)
         if overlay:
-            data, det_count = await fetch_snapshot_jpeg_with_overlay(url, seek_sec)
+            data, det_count = await fetch_snapshot_jpeg_with_overlay(url, seek_sec, verify_tls=verify)
         else:
-            data = await fetch_snapshot_jpeg(url, seek_sec)
+            data = await fetch_snapshot_jpeg(url, seek_sec, verify_tls=verify)
             det_count = 0
         if data is None and seek_sec > 0:
             log.info("snapshot failed at seek_sec=%s, retrying from start (loop)", seek_sec)
             if overlay:
-                data, det_count = await fetch_snapshot_jpeg_with_overlay(url, 0)
+                data, det_count = await fetch_snapshot_jpeg_with_overlay(url, 0, verify_tls=verify)
             else:
-                data = await fetch_snapshot_jpeg(url, 0)
+                data = await fetch_snapshot_jpeg(url, 0, verify_tls=verify)
                 det_count = 0
     if data is None:
         now = time.monotonic()

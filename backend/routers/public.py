@@ -42,9 +42,16 @@ async def close_vision_client() -> None:
 # 120 req/5s, this reduces actual vision calls to 4 per TTL window.
 
 _PREVIEW_CACHE_TTL = float(os.getenv("PREVIEW_CACHE_TTL", "3.0"))
+# Negative cache: when a vision fetch fails, remember the failure for a short
+# window so the next round of 5-second-poll requests doesn't immediately re-hit
+# the upstream while it's still down. Gives the failing source breathing room
+# and prevents request pile-up behind per-key locks + semaphores.
+_PREVIEW_FAIL_TTL = float(os.getenv("PREVIEW_FAIL_TTL", "4.0"))
 
 # (source_id, overlay_bool) -> (jpeg_bytes, detection_count_header|None, monotonic_timestamp)
 _preview_cache: dict[tuple[int, bool], tuple[bytes, str | None, float]] = {}
+# (source_id, overlay_bool) -> monotonic_timestamp of last failure
+_preview_fail_cache: dict[tuple[int, bool], float] = {}
 
 # Per-key locks: when cache is stale, only ONE coroutine fetches from vision;
 # others wait on the lock and then read the freshly-populated cache.
@@ -171,6 +178,11 @@ async def source_preview(
     if cached and (time.monotonic() - cached[2]) < _PREVIEW_CACHE_TTL:
         return _make_preview_response(cached[0], cached[1])
 
+    # Negative-cache fast path: short-circuit if the previous fetch just failed.
+    failed_at = _preview_fail_cache.get(cache_key)
+    if failed_at is not None and (time.monotonic() - failed_at) < _PREVIEW_FAIL_TTL:
+        raise HTTPException(status_code=502, detail="Vision snapshot failed (cached)")
+
     # Cache miss / stale. Acquire per-key lock so only one coroutine fetches
     # from vision; all other concurrent callers wait here and then hit the
     # fresh cache above or read the just-populated entry below.
@@ -180,6 +192,9 @@ async def source_preview(
         cached = _preview_cache.get(cache_key)
         if cached and (time.monotonic() - cached[2]) < _PREVIEW_CACHE_TTL:
             return _make_preview_response(cached[0], cached[1])
+        failed_at = _preview_fail_cache.get(cache_key)
+        if failed_at is not None and (time.monotonic() - failed_at) < _PREVIEW_FAIL_TTL:
+            raise HTTPException(status_code=502, detail="Vision snapshot failed (cached)")
 
         vision_url = os.getenv("VISION_URL", "http://vision:9000")
         try:
@@ -187,20 +202,28 @@ async def source_preview(
             async with _preview_semaphore:
                 r = await client.get(
                     f"{vision_url}/snapshot",
-                    params={"url": row.url, "overlay": overlay, "t": t},
+                    params={
+                        "url": row.url,
+                        "overlay": overlay,
+                        "t": t,
+                        "verify_tls": "1" if getattr(row, "verify_tls", True) else "0",
+                    },
                 )
             if r.status_code != 200:
                 body_preview = (r.text or (r.content.decode("utf-8", errors="replace") if r.content else ""))[:200]
                 log.warning("preview source_id=%s vision_status=%s body=%s", source_id, r.status_code, body_preview)
+                _preview_fail_cache[cache_key] = time.monotonic()
                 raise HTTPException(status_code=502, detail="Vision snapshot failed")
             detection_count = r.headers.get("X-Detection-Count")
             _preview_cache[cache_key] = (r.content, detection_count, time.monotonic())
+            _preview_fail_cache.pop(cache_key, None)
             return _make_preview_response(r.content, detection_count)
         except httpx.RequestError as e:
             log.warning(
                 "preview source_id=%s vision unreachable: %s %s",
                 source_id, type(e).__name__, str(e) or repr(e),
             )
+            _preview_fail_cache[cache_key] = time.monotonic()
             raise HTTPException(status_code=502, detail="Vision service unavailable")
 
 
@@ -225,7 +248,12 @@ async def warm_preview_cache() -> None:
             async with _preview_semaphore:
                 r = await client.get(
                     f"{vision_url}/snapshot",
-                    params={"url": row.url, "overlay": True, "t": "0"},
+                    params={
+                        "url": row.url,
+                        "overlay": True,
+                        "t": "0",
+                        "verify_tls": "1" if getattr(row, "verify_tls", True) else "0",
+                    },
                 )
             if r.status_code == 200 and r.content:
                 detection_count = r.headers.get("X-Detection-Count")

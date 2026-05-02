@@ -22,6 +22,7 @@ class Source(Base):
     location: Mapped[str] = mapped_column(String(512), default="")
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     direct_embed: Mapped[bool] = mapped_column(Boolean, default=False)
+    verify_tls: Mapped[bool] = mapped_column(Boolean, default=True)
     pull_interval_sec: Mapped[int] = mapped_column(Integer, default=5)
     origin_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

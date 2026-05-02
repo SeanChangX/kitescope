@@ -44,10 +44,10 @@ def _draw_corner_box(frame, x1: int, y1: int, x2: int, y2: int) -> None:
     cv2.line(frame, (x2, y2 - corner), (x2, y2), c, t)
 
 
-async def fetch_snapshot_jpeg(url: str, seek_offset_sec: float = 0) -> bytes | None:
+async def fetch_snapshot_jpeg(url: str, seek_offset_sec: float = 0, verify_tls: bool = True) -> bytes | None:
     stype = detect_source_type(url)
     adapter_cls = get_adapter(stype)
-    adapter = adapter_cls(url=url, source_id="preview", interval_sec=5, seek_offset_sec=seek_offset_sec)
+    adapter = adapter_cls(url=url, source_id="preview", interval_sec=5, seek_offset_sec=seek_offset_sec, verify_tls=verify_tls)
     try:
         frame_result = await adapter.fetch_frame()
         if frame_result is None:
@@ -58,11 +58,11 @@ async def fetch_snapshot_jpeg(url: str, seek_offset_sec: float = 0) -> bytes | N
         adapter.close()
 
 
-async def fetch_snapshot_jpeg_with_overlay(url: str, seek_offset_sec: float = 0) -> tuple[bytes | None, int]:
+async def fetch_snapshot_jpeg_with_overlay(url: str, seek_offset_sec: float = 0, verify_tls: bool = True) -> tuple[bytes | None, int]:
     """Fetch one frame, run detection, draw boxes. Returns (JPEG bytes, count) for this frame."""
     stype = detect_source_type(url)
     adapter_cls = get_adapter(stype)
-    adapter = adapter_cls(url=url, source_id="preview", interval_sec=5, seek_offset_sec=seek_offset_sec)
+    adapter = adapter_cls(url=url, source_id="preview", interval_sec=5, seek_offset_sec=seek_offset_sec, verify_tls=verify_tls)
     try:
         frame_result = await adapter.fetch_frame()
         if frame_result is None:

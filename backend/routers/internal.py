@@ -53,6 +53,7 @@ async def internal_list_sources(
             "url": s.url,
             "type": s.type,
             "pull_interval_sec": s.pull_interval_sec,
+            "verify_tls": getattr(s, "verify_tls", True),
         })
     return out
 

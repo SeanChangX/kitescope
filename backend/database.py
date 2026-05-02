@@ -64,6 +64,17 @@ def _add_source_origin_url(conn):
         conn.execute(text("ALTER TABLE sources ADD COLUMN origin_url VARCHAR(2048)"))
 
 
+def _add_source_verify_tls(conn):
+    """Add sources.verify_tls if missing. Defaults to 1 (verify) so existing rows are unaffected."""
+    result = conn.execute(text("PRAGMA table_info(sources)"))
+    rows = result.fetchall()
+    if not rows:
+        return
+    names = [r[1] for r in rows]
+    if "verify_tls" not in names:
+        conn.execute(text("ALTER TABLE sources ADD COLUMN verify_tls BOOLEAN DEFAULT 1"))
+
+
 def _add_user_welcome_sent_at(conn):
     """Add users.welcome_sent_at if missing."""
     result = conn.execute(text("PRAGMA table_info(users)"))
@@ -81,4 +92,5 @@ async def init_db():
         await conn.run_sync(_add_notification_columns)
         await conn.run_sync(_add_source_direct_embed)
         await conn.run_sync(_add_source_origin_url)
+        await conn.run_sync(_add_source_verify_tls)
         await conn.run_sync(_add_user_welcome_sent_at)

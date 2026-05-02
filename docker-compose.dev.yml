@@ -76,7 +76,7 @@ services:
       - INTERNAL_SECRET_FILE=/app/data/internal_secret
       - MODELS_DIR=/app/models
       - VISION_LOOP_INTERVAL_SEC=5
-      - VISION_LOG_LEVEL=INFO
+      - VISION_LOG_LEVEL=DEBUG
       # Detector: auto = use Coral if detected else CPU; cpu = force CPU; edgetpu = force Coral
       - DETECT_DEVICE=${DETECT_DEVICE:-auto}
     healthcheck:

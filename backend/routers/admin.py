@@ -167,6 +167,7 @@ async def list_sources(
             "location": s.location,
             "enabled": s.enabled,
             "direct_embed": getattr(s, "direct_embed", False),
+            "verify_tls": getattr(s, "verify_tls", True),
             "url": s.url,
         }
         for s in rows
@@ -178,6 +179,7 @@ class UpdateSourceBody(BaseModel):
     location: str | None = None
     enabled: bool | None = None
     direct_embed: bool | None = None
+    verify_tls: bool | None = None
     url: str | None = None
 
 
@@ -200,6 +202,8 @@ async def update_source(
         row.enabled = body.enabled
     if body.direct_embed is not None:
         row.direct_embed = body.direct_embed
+    if body.verify_tls is not None:
+        row.verify_tls = body.verify_tls
     if body.url is not None:
         row.url = _normalize_source_url(body.url)[:2048]
     await db.flush()
@@ -925,7 +929,8 @@ async def backup_settings(
         "admin_usernames": [r.username for r in admin_rows],
         "sources": [
             {"id": r.id, "url": r.url, "type": r.type, "name": r.name or "", "location": r.location or "",
-             "enabled": r.enabled, "direct_embed": r.direct_embed, "pull_interval_sec": r.pull_interval_sec,
+             "enabled": r.enabled, "direct_embed": r.direct_embed, "verify_tls": getattr(r, "verify_tls", True),
+             "pull_interval_sec": r.pull_interval_sec,
              "origin_url": r.origin_url, "created_at": r.created_at.isoformat(), "updated_at": r.updated_at.isoformat()}
             for r in source_rows
         ],
@@ -1028,6 +1033,7 @@ async def restore_settings(
             location=row.get("location", ""),
             enabled=row.get("enabled", True),
             direct_embed=row.get("direct_embed", False),
+            verify_tls=row.get("verify_tls", True),
             pull_interval_sec=int(row.get("pull_interval_sec", 5)),
             origin_url=row.get("origin_url"),
             created_at=datetime.fromisoformat(row["created_at"].replace("Z", "+00:00")) if row.get("created_at") else datetime.utcnow(),

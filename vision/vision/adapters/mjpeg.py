@@ -11,7 +11,11 @@ log = logging.getLogger(__name__)
 JPEG_SOI = b"\xff\xd8"
 JPEG_EOI = b"\xff\xd9"
 MAX_STREAM_BYTES = 2 * 1024 * 1024  # stop after 2MB if no frame found
-STREAM_TIMEOUT = 15.0
+STREAM_TIMEOUT = 5.0
+# Content-Type prefixes that may legitimately deliver JPEG data. Anything else
+# (e.g. text/html error/auth pages) is rejected immediately so we don't burn
+# the full timeout budget reading megabytes of HTML.
+_VALID_CONTENT_PREFIXES = ("image/", "multipart/", "application/octet-stream", "video/")
 
 
 def _extract_first_jpeg(data: bytes) -> bytes | None:
@@ -31,10 +35,14 @@ class MjpegAdapter(BaseAdapter):
         try:
             headers = browser_headers_for_url(self.url)
             timeout = httpx.Timeout(STREAM_TIMEOUT)
-            async with httpx.AsyncClient(timeout=timeout) as client:
+            async with httpx.AsyncClient(timeout=timeout, verify=self.verify_tls) as client:
                 async with client.stream("GET", self.url, headers=headers) as r:
                     if r.status_code != 200:
                         log.warning("mjpeg non-200 status=%s url=%s", r.status_code, self.url[:80])
+                        return None
+                    ctype = (r.headers.get("content-type") or "").strip().lower()
+                    if ctype and not any(ctype.startswith(p) for p in _VALID_CONTENT_PREFIXES):
+                        log.warning("mjpeg non-image content-type=%s url=%s", ctype[:60], self.url[:80])
                         return None
                     buffer = b""
                     async for chunk in r.aiter_bytes():

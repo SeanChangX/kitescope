@@ -160,10 +160,15 @@ export default function SourceCard({
   const previewCancelledRef = useRef(false);
   const historyLastRecordedRef = useRef<string | null>(null);
   const historyKeyRef = useRef<string>("");
+  // Exponential backoff state: skip ticks after consecutive failures so we don't
+  // hammer a down upstream every 5s. Resets on success.
+  const failureCountRef = useRef(0);
+  const nextAttemptTickRef = useRef(0);
 
   // Fetch proxy preview when not using embedded image URL. Stagger by staggerIndex so cards load one by one.
   useEffect(() => {
     if (useEmbeddedUrl) return;
+    if (previewTick < nextAttemptTickRef.current) return;
     previewCancelledRef.current = false;
     const delayMs = staggerIndex * PREVIEW_STAGGER_MS;
     const overlay = directEmbed ? 0 : 1;
@@ -179,6 +184,8 @@ export default function SourceCard({
         })
         .then((blob) => {
           if (blob == null || previewCancelledRef.current) return;
+          failureCountRef.current = 0;
+          nextAttemptTickRef.current = 0;
           setPreviewError(false);
           setPreviewBlobUrl((prev) => {
             if (prev) URL.revokeObjectURL(prev);
@@ -188,7 +195,12 @@ export default function SourceCard({
           });
         })
         .catch(() => {
-          if (!previewCancelledRef.current) setPreviewError(true);
+          if (previewCancelledRef.current) return;
+          failureCountRef.current += 1;
+          // Backoff in ticks (1 tick = ~5s): 1, 2, 4, 8, capped at 12 (~60s).
+          const skip = Math.min(12, Math.pow(2, failureCountRef.current - 1));
+          nextAttemptTickRef.current = previewTick + skip;
+          setPreviewError(true);
         });
     }, delayMs);
     return () => {

@@ -22,7 +22,7 @@ class HttpSnapshotAdapter(BaseAdapter):
     async def fetch_frame(self) -> FrameResult | None:
         try:
             headers = browser_headers_for_url(self.url)
-            async with httpx.AsyncClient(timeout=15.0) as client:
+            async with httpx.AsyncClient(timeout=15.0, verify=self.verify_tls) as client:
                 r = await client.get(self.url, headers=headers)
                 content_type = (r.headers.get("content-type") or "").split(";")[0].strip().lower()
                 log.debug(
