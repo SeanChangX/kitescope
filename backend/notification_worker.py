@@ -46,7 +46,9 @@ async def _run_once() -> None:
         now = datetime.utcnow()
         # Per tick: one Open-Meteo resolution + one vision overlay frame per source, shared by all subscribers.
         weather_by_source_id: dict[int, str] = {}
-        snapshot_jpeg_by_source_id: dict[int, bytes | None] = {}
+        # Snapshot cache stores (jpeg_bytes_or_None, fresh_count_or_None) per source so the
+        # caption count and the drawn boxes both come from the same frame + same detection pass.
+        snapshot_by_source_id: dict[int, tuple[bytes | None, int | None]] = {}
 
         async with httpx.AsyncClient(timeout=15.0) as http_client:
             for sub, user, source in subs_rows:
@@ -75,27 +77,47 @@ async def _run_once() -> None:
                 place = source.name or source.location or "stream"
                 view_url = (by_key.get("public_app_url") or os.getenv("PUBLIC_APP_URL") or "").strip().rstrip("/") or None
                 template = (by_key.get("notify_format_template") or "").strip() or None
-                msg = format_kite_notification(
-                    int(count), place, weather_str or None, view_url, template=template
-                )
                 channel = (sub.channel or "telegram").lower()
                 sent = False
                 if channel == "line" and user.line_id and line_token:
+                    msg = format_kite_notification(
+                        int(count), place, weather_str or None, view_url, template=template
+                    )
                     sent = await send_line_message(line_token, user.line_id, msg)
                 elif (channel == "telegram" or not sent) and user.telegram_id and telegram_token:
-                    if sid not in snapshot_jpeg_by_source_id:
+                    if sid not in snapshot_by_source_id:
                         snap: bytes | None = None
+                        fresh_count: int | None = None
                         try:
                             r = await http_client.get(
                                 f"{VISION_URL}/snapshot",
-                                params={"url": source.url, "overlay": True},
+                                params={
+                                    "url": source.url,
+                                    "overlay": "true",
+                                    "verify_tls": "1" if source.verify_tls else "0",
+                                },
+                                timeout=30.0,
                             )
                             if r.status_code == 200 and r.content:
                                 snap = r.content
+                                try:
+                                    fresh_count = int(r.headers.get("X-Detection-Count", ""))
+                                except (TypeError, ValueError):
+                                    fresh_count = None
                         except Exception:
                             pass
-                        snapshot_jpeg_by_source_id[sid] = snap
-                    snapshot_bytes = snapshot_jpeg_by_source_id[sid]
+                        snapshot_by_source_id[sid] = (snap, fresh_count)
+                    snapshot_bytes, fresh_count = snapshot_by_source_id[sid]
+                    # When we have a fresh frame + fresh detection, re-validate the threshold
+                    # against this exact frame: if kites left between the EMA window and now,
+                    # skip rather than send a photo whose boxes don't match the caption.
+                    # Skipping does not advance last_notified_at, so cooldown semantics are unchanged.
+                    if snapshot_bytes is not None and fresh_count is not None and fresh_count < sub.threshold:
+                        continue
+                    display_count = fresh_count if (snapshot_bytes is not None and fresh_count is not None) else int(count)
+                    msg = format_kite_notification(
+                        display_count, place, weather_str or None, view_url, template=template
+                    )
                     if snapshot_bytes:
                         sent = await send_telegram_photo(
                             telegram_token,
