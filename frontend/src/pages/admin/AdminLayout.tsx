@@ -170,7 +170,8 @@ export default function AdminLayout() {
           </div>
         )}
       </header>
-      <main className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:py-8">
+      {/* pb-24 reserves space so the fixed bottom-right action buttons (GitHub / Buy Me a Coffee) never cover page content. */}
+      <main className="min-h-0 flex-1 overflow-y-auto px-4 pt-6 pb-24 sm:pt-8">
         <div className="mx-auto max-w-6xl min-w-0">
           <Routes>
             <Route index element={<AdminDashboard />} />
